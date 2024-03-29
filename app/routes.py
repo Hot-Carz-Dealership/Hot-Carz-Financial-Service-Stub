@@ -5,6 +5,7 @@ from flask import jsonify, request, session
 from sqlalchemy import Text, text, func
 from . import app
 from .models import *
+import random
 import re
 
 ''' all the Financial Services APIs/ENDPOINTS are configured and exposed in this .py file '''
@@ -45,21 +46,22 @@ def all_purchases():
 
     return jsonify({'purchases': purchases_list}), 200
 
-@app.route('/api/member/purchases/', methods=['GET'])
-def member_purchases():
+
+@app.route('/api/member/vehicle-purchases/', methods=['GET'])
+def member_vehicle_purchases():
     member_session_id = session.get('member_session_id')
 
     if member_session_id is None:
         return jsonify({'message': 'No session id provided'}), 404
 
-    purchases_member = Purchases.query.filter_by(memberID=member_session_id).all()
+    vehicle_purchases_member = Purchases.query.filter_by(memberID=member_session_id).all()
 
-    if not purchases_member:
+    if not vehicle_purchases_member:
         return jsonify({'message': 'No purchases found for this member'}), 404
 
     # Extract necessary purchase details
     purchases_info = []
-    for purchase in purchases_member:
+    for purchase in vehicle_purchases_member:
         car_info = Cars.query.filter_by(VIN_carID=purchase.VIN_carID).first()
         purchases_info.append({
             'purchaseID': purchase.purchaseID,
@@ -113,12 +115,6 @@ def member_purchases():
         payment_info.append(payment_data)
 
     return jsonify(payment_info), 200
-
-
-
-
-
-
 
 
 @app.route('/api/current-bids', methods=['GET', 'POST'])
@@ -277,6 +273,34 @@ def manage_payments(member_id):
             db.session.rollback()
             return jsonify({'error': str(e)}), 500
 
-# @app.route('/api/purchases/add', methods=['POST'])
-# def new_purchase():
-#     ...
+@app.route('/api/vehiclePurchase', methods=['POST'])
+def purchase_vehicle():
+    ...
+
+
+@app.route('/api/purchases/fullPrice', methods=['POST'])
+def new_purchase():
+    ...
+
+
+def creditScoreGenerator() -> int:
+    # generates a random creditScore
+    return random.randint(500, 850)
+
+
+def financingValue(vehicleCost: int, monthlyIncome: int, creditscore: int) -> float:
+    # may be scuffed because i need to know more on more accurate rates but this might be ok
+    if creditscore >= 750:
+        base_loan_interest_rate = 5
+    elif creditscore >= 700:
+        base_loan_interest_rate = 10
+    elif creditscore >= 650:
+        base_loan_interest_rate = 15
+    else:
+        base_loan_interest_rate = 20
+
+    # Calculate financing value based on vehicle cost and monthly income
+    final_financing_percentage = base_loan_interest_rate + ((vehicleCost / monthlyIncome) * 100)
+    financing_loan_value = (final_financing_percentage / 100) * vehicleCost
+
+    return financing_loan_value
