@@ -1,7 +1,7 @@
 # app/routes.py
 
 from datetime import datetime
-from flask import jsonify, request
+from flask import jsonify, request, session
 from sqlalchemy import Text, text, func
 from . import app
 from .models import *
@@ -44,6 +44,81 @@ def all_purchases():
         purchases_list.append(purchase_data)
 
     return jsonify({'purchases': purchases_list}), 200
+
+@app.route('/api/member/purchases/', methods=['GET'])
+def member_purchases():
+    member_session_id = session.get('member_session_id')
+
+    if member_session_id is None:
+        return jsonify({'message': 'No session id provided'}), 404
+
+    purchases_member = Purchases.query.filter_by(memberID=member_session_id).all()
+
+    if not purchases_member:
+        return jsonify({'message': 'No purchases found for this member'}), 404
+
+    # Extract necessary purchase details
+    purchases_info = []
+    for purchase in purchases_member:
+        car_info = Cars.query.filter_by(VIN_carID=purchase.VIN_carID).first()
+        purchases_info.append({
+            'purchaseID': purchase.purchaseID,
+            'car_make': car_info.make,
+            'car_model': car_info.model,
+            'car_year': car_info.year,
+            'payment_type': purchase.paymentType,
+            'bid_value': purchase.bidValue,
+            'bid_status': purchase.bidStatus,
+            'confirmation_number': purchase.confirmationNumber
+        })
+
+    return jsonify(purchases_info), 200
+
+
+@app.route('/api/member/payments/', methods=['GET'])
+def member_purchases():
+    member_session_id = session.get('member_session_id')
+
+    if member_session_id is None:
+        return jsonify({'message': 'No session id provided'}), 404
+
+    payments_member = Payments.query.filter_by(memberID=member_session_id).all()
+
+    if not payments_member:
+        return jsonify({'message': 'No purchases found for this member'}), 404
+
+    # Extract necessary purchase details
+    payment_info = []
+    for payment in payments_member:
+        payment_data = {
+            'paymentID': payment.paymentID,
+            'paymentStatus': payment.paymentStatus,
+            'paymentPerMonth': payment.paymentPerMonth,
+            'financeLoanAmount': payment.financeLoanAmount,
+            'loanRatePercentage': payment.loanRatePercentage,
+            'valuePaid': payment.valuePaid,
+            'valueToPay': payment.valueToPay,
+            'initialPurchase': payment.initialPurchase,  # Convert to string
+            'lastPayment': payment.lastPayment,  # Convert to string
+            'creditScore': payment.creditScore,
+            'income': payment.income,
+            'paymentType': payment.paymentType,
+            'servicePurchased': payment.servicePurchased,
+            'cardNumber': payment.cardNumber,
+            'expirationDate': payment.expirationDate,
+            'CVV': payment.CVV,
+            'routingNumber': payment.routingNumber,
+            'bankAcctNumber': payment.bankAcctNumber
+        }
+        payment_info.append(payment_data)
+
+    return jsonify(payment_info), 200
+
+
+
+
+
+
 
 
 @app.route('/api/current-bids', methods=['GET', 'POST'])
