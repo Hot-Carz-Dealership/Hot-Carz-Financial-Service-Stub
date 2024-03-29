@@ -79,7 +79,7 @@ To start the application on Windows, you can use the `startScript.ps1` PowerShel
 
 ### Unix/Linux/MacOS
 
-To start the application on Unix/Linux/MacOS, you can use the `startScript.sh` shell script. Open a terminal and navigate to the scripts directory of your project. Then, enter the following command:
+To start the application on Unix/Linux/MacOS, you can use the `startScript.sh` shell script. Open a terminal and navigate to the root directory of your project. Then, enter the following command:
 
 ```bash
 chmod +x startScript.sh # Make the script executable (if needed)
