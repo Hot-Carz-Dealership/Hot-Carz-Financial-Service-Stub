@@ -287,112 +287,286 @@ def purchase_vehicle():
     vehicle_vin = data.get('vehicle_vin')
     payment_method = data.get('payment_method')
     member_id = data.get('member_id')
+    payment_option = data.get('payment_option')  # Payment option: 'Card' or 'Check'
+    vehicle_cost = return_vehicle_cost(vehicle_vin)
+
+    if vehicle_vin == -1:
+        return jsonify({'message': "CAR DOESNT EXIST"}), 400
 
     if payment_method == 'MSRP':
-        payment_option = data.get('payment_option')  # Payment option: 'Card' or 'Check'
         if payment_option == 'Card':
             card_number = data.get('card_number')
             cvv = data.get('CVV')
             expiration_date = data.get('expirationDate')
 
-            # Regex validation for card number, CVV, and expiration date
-            card_regex = re.compile(r'^[0-9]{16}$')
-            cvv_regex = re.compile(r'^[0-9]{3}$')
-            expiration_regex = re.compile(r'^(0[1-9]|1[0-2])/[0-9]{2}$')  # MM/YY experation date format
+            regex_card_check(card_number, cvv, expiration_date)
 
-            # frontend should display a popup message to ensure that the user knows where their input is invalid
-            # based on where the match occurs.
-            if not card_regex.match(card_number):
-                return jsonify({'message': 'Invalid card number format.'}), 400
-            if not cvv_regex.match(cvv):
-                return jsonify({'message': 'Invalid CVV format.'}), 400
-            if not expiration_regex.match(expiration_date):
-                return jsonify({'message': 'Invalid expiration date format.'}), 400
-
-            # Check if the payment exceeds $5000
-            # Assuming vehicle cost is provided in the request data
-            vehicle_cost = data.get('vehicle_cost')
             if vehicle_cost > 5000:
                 return jsonify({'message': 'Card payments are limited to $5000. The rest must be paid in person at '
                                            'the dealership.'}), 400
 
-            # msrp_vehicle_purchase(vehicle_vin, payment_option, card_number, cvv, expiration_date)
+            msrp_vehicle_purchase_no_financing(vehicle_vin, payment_method, member_id, payment_option, card_number, cvv,
+                                               expiration_date, vehicle_cost, routing_number=None, account_number=None)
         elif payment_option == 'Check':
             routing_number = data.get('routing_number')
             account_number = data.get('account_number')
 
-            # Regex validation for routing number and account number
-            routing_regex = re.compile(r'^[0-9]{9}$')
-            account_regex = re.compile(r'^[0-9]{9,12}$')  # Bank account numbers vary from 9 to 12 char length
+            regex_bank_acct_check(routing_number, account_number)
 
-            # again frontend should display a popupmessage to ensure that the user knows wehre their input is invalid
-            if not routing_regex.match(routing_number):
-                return jsonify({'message': 'Invalid routing number format.'}), 400
-            if not account_regex.match(account_number):
-                return jsonify({'message': 'Invalid account number format.'}), 400
-
-            # Proceed with the purchase, FULL MSRP PURCHASE, no income, no credit score
-            # msrp_vehicle_purchase(vehicle_vin, payment_option, routing_number, account_number)
-
+            msrp_vehicle_purchase_no_financing(vehicle_vin, payment_method, member_id, payment_option, vehicle_cost,
+                                               card_number=None, cvv=None, expiration_date=None, routing_number=None,
+                                               account_number=None)  # parameter definitions, if there is an error due to
+            # positioning just fix i cant tell here alone lol
         else:
             return jsonify({'message': 'Invalid payment option for MSRP.'}), 400
     else:
-        bidValue = data.get('bidValue')
-        bidStatus = 'Processing'  # not sent from the frontend. The change to Confirmed/Denied
+        bid_value = data.get('bidValue')
+        bid_status = 'Processing'  # not sent from the frontend. The change to Confirmed/Denied
+        if payment_option == 'Card':
+            card_number = data.get('card_number')
+            cvv = data.get('CVV')
+            expiration_date = data.get('expirationDate')
 
-        # purchase is being done in bidding.
-        # bid_vehicle_purchase(vehicle_vin)
-        ...
+            regex_card_check(card_number, cvv, expiration_date)
+
+            bid_insert_no_financing(vehicle_vin, payment_method, member_id, bid_value, bid_status, payment_option,
+                                    card_number, cvv, expiration_date, routing_number=None, account_number=None)
+        else:
+            routing_number = data.get('routing_number')
+            account_number = data.get('account_number')
+
+            regex_bank_acct_check(routing_number, account_number)
+            bid_insert_no_financing(vehicle_vin, payment_method, member_id, bid_value, bid_status, payment_option,
+                                    routing_number, account_number, card_number=None, cvv=None, expiration_date=None)
 
     return jsonify({'message': 'Vehicle purchase processed successfully.'}), 200
 
-    return jsonify({'message': 'Vehicle purchase processed successfully.'}), 200
+
+def regex_card_check(card_number, cvv, expiration_date):
+    # Regex validation for card number, CVV, and expiration date
+    card_regex = re.compile(r'^[0-9]{16}$')
+    cvv_regex = re.compile(r'^[0-9]{3}$')
+    expiration_regex = re.compile(r'^(0[1-9]|1[0-2])/[0-9]{2}$')  # MM/YY experation date format
+
+    if not card_regex.match(card_number):
+        return False
+    if not cvv_regex.match(cvv):
+        return False
+    if not expiration_regex.match(expiration_date):
+        return False
+    return True
 
 
-# @app.route('/api/vehicle-purchase/purchase-info', methods=['POST'])
-# def msrp_vehicle_purchase(vehicle_vin):
-#     ...
-#
+def regex_bank_acct_check(routing_number, account_number):
+    routing_regex = re.compile(r'^[0-9]{9}$')
+    account_regex = re.compile(r'^[0-9]{9,12}$')  # Bank account numbers vary from 9 to 12 char length
 
-@app.route('/api/vehicle-purchase/new-bid-insert', methods=['POST'])
-def bid_vehicle_purchase(vehicle_vin):
-    data = request.json
-    paymentType = data.get('paymentType')
-    if paymentType != 'BID':
-        return jsonify({'message': 'No A bid Value'}), 400
+    if not routing_regex.match(routing_number):
+        return False
+    if not account_regex.match(account_number):
+        return False
+    return True
 
-    vehicle_vin = data.get('vehicle_vin')
-    member_id = data.get('member_id')
-    bidValue = data.get('bidValue')
 
-    # insert into Purchases table of bids new bid
-    # Create a new bid entry
-    new_bid = Purchases(
-        # HUGE ISSUE, IMPLMENTING WITH PAYMENTS TABLE AND THE PAYMENT ID AS IT IS CONTRAINED !!!
-        VIN_carID=vehicle_vin,
-        memberID=member_id,
-        paymentType='BID',
-        bidValue=bidValue,
-        bidStatus='Processing',  # not sent from the frontend. The change to Confirmed/Denied
-        confirmationNumber=confirmation_number_generation()
-    )
+@app.route('/api/vehicle-purchase/new-vehicle-purchase-no-finance', methods=['POST'])
+def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_method, member_id, payment_option, card_number, cvv,
+                                       expiration_date, routing_number, account_number):
+    # payment_option = check, card
+    # payment_method = MSRP, BID
 
-    # Add the new bid to the database session and commit
-    db.session.add(new_bid)
-    db.session.commit()
+    try:
+        # Insert purchase information into the database
+        if payment_method == 'CARD':
+            new_payment = Payments(
+                paymentStatus='Confirmed',
+                paymentPerMonth=None,
+                financeLoanAmount=None,
+                loanRatePercentage=None,
+                valuePaid=None,
+                valueToPay=None,
+                initialPurchase=None,
+                lastPayment=None,
+                creditScore=None,
+                income=None,
+                paymentType=payment_option,  # payment_option = check, card
+                servicePurchased='Vehicle Purchase',
+                cardNumber=card_number,
+                expirationDate=expiration_date,
+                CVV=cvv,
+                routingNumber=routing_number,
+                bankAcctNumber=account_number,
+                memberID=member_id
+            )
+        else:
+            new_payment = Payments(
+                paymentStatus='Confirmed',
+                paymentPerMonth=None,
+                financeLoanAmount=None,
+                loanRatePercentage=None,
+                valuePaid=None,
+                valueToPay=None,
+                initialPurchase=None,
+                lastPayment=None,
+                creditScore=None,
+                income=None,
+                paymentType=payment_option,  # payment_option = check, card
+                servicePurchased='Vehicle Purchase',
+                cardNumber=card_number,
+                expirationDate=expiration_date,
+                CVV=cvv,
+                routingNumber=routing_number,
+                bankAcctNumber=account_number,
+                memberID=member_id
+            )
 
-    return jsonify({'message': 'Bid successfully inserted.'}), 201
+        db.session.add(new_payment)
+        db.session.commit()
+
+        new_purchase = Purchases(
+            paymentID=new_payment.paymentID,
+            VIN_carID=vehicle_vin,
+            memberID=member_id,
+            paymentType='MSRP',  # Assuming this is MSRP payment
+            bidStatus='Confirmed',  # Assuming the purchase is always confirmed for MSRP
+            confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
+        )
+
+        db.session.add(new_purchase)
+        db.session.commit()
+
+        return jsonify({'message': 'Vehicle purchase processed successfully.'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/vehicle-purchase/new-bid-insert-no-finance', methods=['POST'])
+def bid_insert_no_financing(vehicle_vin, payment_method, member_id, bid_value, bid_status, payment_option, card_number,
+                            cvv, expiration_date, routing_number, account_number):
+    # payment_option = check, card
+    # payment_method = MSRP, BID
+    try:
+        if payment_option == 'CARD':
+            new_payment = Payments(
+                paymentStatus='pending',
+                paymentPerMonth=None,
+                financeLoanAmount=None,
+                loanRatePercentage=None,
+                valuePaid=None,
+                valueToPay=None,
+                initialPurchase=None,
+                lastPayment=None,
+                creditScore=None,
+                income=None,
+                paymentType=payment_option,
+                servicePurchased='Vehicle Purchase',
+                cardNumber=card_number,
+                expirationDate=expiration_date,
+                CVV=cvv,
+                routingNumber=None,
+                bankAcctNumber=None,
+                memberID=member_id
+            )
+        elif payment_option == 'CHECK':
+            # Create a new payment entry for check payments
+            new_payment = Payments(
+                paymentStatus='pending',
+                paymentPerMonth=None,
+                financeLoanAmount=None,
+                loanRatePercentage=None,
+                valuePaid=None,
+                valueToPay=None,
+                initialPurchase=None,
+                lastPayment=None,
+                creditScore=None,
+                income=None,
+                paymentType=payment_option,
+                servicePurchased='Vehicle Purchase',
+                cardNumber=None,
+                expirationDate=None,
+                CVV=None,
+                routingNumber=routing_number,
+                bankAcctNumber=account_number,
+                memberID=member_id
+            )
+        else:
+            return jsonify({'message': 'Invalid payment option. Choose CARD or CHECK.'}), 400
+
+        # Add the new payment to the database session and commit
+        db.session.add(new_payment)
+        db.session.commit()
+
+        # Create a new bid entry
+        new_bid = Purchases(
+            paymentID=new_payment.paymentID,
+            VIN_carID=vehicle_vin,
+            memberID=member_id,
+            paymentType=payment_method,
+            bidValue=bid_value,
+            bidStatus=bid_status,
+            confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
+        )
+
+        # Add the new bid to the database session and commit
+        db.session.add(new_bid)
+        db.session.commit()
+
+        return jsonify({'message': 'Bid successfully inserted.'}), 201
+
+    except Exception as e:
+        # Rollback the transaction in case of an error
+        db.session.rollback()
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+
+
+def bid_table_insert(new_payment, vehicle_vin, member_id, payment_method, bid_value, bid_status):
+    try:
+        new_bid = Purchases(
+            paymentID=new_payment.paymentID,
+            VIN_carID=vehicle_vin,
+            memberID=member_id,
+            paymentType=payment_method,
+            bidValue=bid_value,
+            bidStatus=bid_status,
+            confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
+        )
+
+        # Add the new bid to the database session and commit
+        db.session.add(new_bid)
+        db.session.commit()
+
+        return jsonify({'message': 'Bid successfully inserted.'}), 201
+    except Exception as e:
+        # Rollback the transaction in case of an error
+        db.session.rollback()
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+
+
+def return_vehicle_cost(vehicle_vin):
+    vehicle = Cars.query.filter_by(VIN_carID=vehicle_vin).first()
+    if not vehicle:
+        return -1
+    return vehicle.price
+
+
+def charCompany(cardNumber):
+    if cardNumber[0] == '4':
+        return 'Visa'
+    elif cardNumber[0] == '5':
+        return 'Mastercard'
+    elif cardNumber[0] == '6':
+        return 'Discover'
+    elif cardNumber[0] == '3':
+        return 'American Express'
+    else:
+        return 'Other'
 
 
 # this function generates the confirmation number randomely
 def confirmation_number_generation():
     totalChars = string.ascii_uppercase + string.digits
     return ''.join(random.choice(totalChars) for i in range(13))
-
-
-@app.route('/api/purchases/fullPrice', methods=['POST'])
-def new_purchase():
-    ...
 
 
 def creditScoreGenerator() -> int:
