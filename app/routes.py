@@ -1,12 +1,14 @@
 # app/routes.py
 
-from datetime import datetime
-from flask import jsonify, request, session
-from sqlalchemy import Text, text, func
-from . import app
-from .models import *
 import random
 import re
+import string
+
+from flask import jsonify, request, session
+from sqlalchemy import text
+
+from . import app
+from .models import *
 
 ''' all the Financial Services APIs/ENDPOINTS are configured and exposed in this .py file '''
 
@@ -273,9 +275,119 @@ def manage_payments(member_id):
             db.session.rollback()
             return jsonify({'error': str(e)}), 500
 
-@app.route('/api/vehiclePurchase', methods=['POST'])
+
+@app.route('/api/vehicle-purchase/new-bid-insert', methods=['POST'])
 def purchase_vehicle():
-    ...
+    member_session_id = session.get('member_session_id')
+    if member_session_id is None:
+        # redirect the user at this point to a login screen if they are not logged in to an account to purchase a vehicle
+        return jsonify({'message': 'You need to log in to purchase a vehicle.'}), 401
+
+    data = request.json
+    vehicle_vin = data.get('vehicle_vin')
+    payment_method = data.get('payment_method')
+    member_id = data.get('member_id')
+
+    if payment_method == 'MSRP':
+        payment_option = data.get('payment_option')  # Payment option: 'Card' or 'Check'
+        if payment_option == 'Card':
+            card_number = data.get('card_number')
+            cvv = data.get('CVV')
+            expiration_date = data.get('expirationDate')
+
+            # Regex validation for card number, CVV, and expiration date
+            card_regex = re.compile(r'^[0-9]{16}$')
+            cvv_regex = re.compile(r'^[0-9]{3}$')
+            expiration_regex = re.compile(r'^(0[1-9]|1[0-2])/[0-9]{2}$')  # MM/YY experation date format
+
+            # frontend should display a popup message to ensure that the user knows where their input is invalid
+            # based on where the match occurs.
+            if not card_regex.match(card_number):
+                return jsonify({'message': 'Invalid card number format.'}), 400
+            if not cvv_regex.match(cvv):
+                return jsonify({'message': 'Invalid CVV format.'}), 400
+            if not expiration_regex.match(expiration_date):
+                return jsonify({'message': 'Invalid expiration date format.'}), 400
+
+            # Check if the payment exceeds $5000
+            # Assuming vehicle cost is provided in the request data
+            vehicle_cost = data.get('vehicle_cost')
+            if vehicle_cost > 5000:
+                return jsonify({'message': 'Card payments are limited to $5000. The rest must be paid in person at '
+                                           'the dealership.'}), 400
+
+            # msrp_vehicle_purchase(vehicle_vin, payment_option, card_number, cvv, expiration_date)
+        elif payment_option == 'Check':
+            routing_number = data.get('routing_number')
+            account_number = data.get('account_number')
+
+            # Regex validation for routing number and account number
+            routing_regex = re.compile(r'^[0-9]{9}$')
+            account_regex = re.compile(r'^[0-9]{9,12}$')  # Bank account numbers vary from 9 to 12 char length
+
+            # again frontend should display a popupmessage to ensure that the user knows wehre their input is invalid
+            if not routing_regex.match(routing_number):
+                return jsonify({'message': 'Invalid routing number format.'}), 400
+            if not account_regex.match(account_number):
+                return jsonify({'message': 'Invalid account number format.'}), 400
+
+            # Proceed with the purchase, FULL MSRP PURCHASE, no income, no credit score
+            # msrp_vehicle_purchase(vehicle_vin, payment_option, routing_number, account_number)
+
+        else:
+            return jsonify({'message': 'Invalid payment option for MSRP.'}), 400
+    else:
+        bidValue = data.get('bidValue')
+        bidStatus = 'Processing'  # not sent from the frontend. The change to Confirmed/Denied
+
+        # purchase is being done in bidding.
+        # bid_vehicle_purchase(vehicle_vin)
+        ...
+
+    return jsonify({'message': 'Vehicle purchase processed successfully.'}), 200
+
+    return jsonify({'message': 'Vehicle purchase processed successfully.'}), 200
+
+
+# @app.route('/api/vehicle-purchase/purchase-info', methods=['POST'])
+# def msrp_vehicle_purchase(vehicle_vin):
+#     ...
+#
+
+@app.route('/api/vehicle-purchase/new-bid-insert', methods=['POST'])
+def bid_vehicle_purchase(vehicle_vin):
+    data = request.json
+    paymentType = data.get('paymentType')
+    if paymentType != 'BID':
+        return jsonify({'message': 'No A bid Value'}), 400
+
+    vehicle_vin = data.get('vehicle_vin')
+    member_id = data.get('member_id')
+    bidValue = data.get('bidValue')
+
+    # insert into Purchases table of bids new bid
+    # Create a new bid entry
+    new_bid = Purchases(
+        # HUGE ISSUE, IMPLMENTING WITH PAYMENTS TABLE AND THE PAYMENT ID AS IT IS CONTRAINED !!!
+        VIN_carID=vehicle_vin,
+        memberID=member_id,
+        paymentType='BID',
+        bidValue=bidValue,
+        bidStatus='Processing',  # not sent from the frontend. The change to Confirmed/Denied
+        confirmationNumber=confirmation_number_generation()
+    )
+
+    # Add the new bid to the database session and commit
+    db.session.add(new_bid)
+    db.session.commit()
+
+    return jsonify({'message': 'Bid successfully inserted.'}), 201
+
+
+# this function generates the confirmation number randomely
+def confirmation_number_generation():
+    totalChars = string.ascii_uppercase + string.digits
+    return ''.join(random.choice(totalChars) for i in range(13))
 
 
 @app.route('/api/purchases/fullPrice', methods=['POST'])
