@@ -590,3 +590,105 @@ def financingValue(vehicleCost: int, monthlyIncome: int, creditscore: int) -> fl
     financing_loan_value = (final_financing_percentage / 100) * vehicleCost
 
     return financing_loan_value
+
+
+def check_loan_eligibility(loan_amount, monthly_income):
+    # Calculate yearly income from monthly income
+    yearly_income = monthly_income * 12
+
+    # Calculate the loan amount and check if it's less than 10% of the yearly income
+    if loan_amount <= (yearly_income * 0.1):
+        return True  # User is eligible for the loan
+    else:
+        return False  # User is not eligible for the loan
+
+
+def adjust_loan_with_downpayment(vehicle_cost, down_payment):
+    # Recalculate the loan amount based on the new down_payment
+    loan_amount = vehicle_cost - down_payment
+    return loan_amount
+
+
+@app.route('/api/vehicle-purchase/new-vehicle-purchase-finance', methods=['POST'])
+def new_vehicle_purchase_finance():
+    try:
+        data = request.json
+        vehicle_vin = data.get('vehicle_vin')
+        payment_method = data.get('payment_method')
+        member_id = data.get('member_id')
+        card_number = data.get('card_number')
+        cvv = data.get('cvv')
+        down_payment = data.get('down_payment')
+        expiration_date = data.get('expiration_date')
+        monthly_income = data.get('monthly_income')
+        credit_score = creditScoreGenerator()
+        vehicle_cost = return_vehicle_cost(vehicle_vin)
+        total_cost = adjust_loan_with_downpayment(vehicle_cost, down_payment)
+        financing_loan_amount = financingValue(total_cost, monthly_income, credit_score)
+
+        loan_eligibility = check_loan_eligibility(financing_loan_amount, monthly_income)
+        if not loan_eligibility:
+            # we want to check if the user wants to re evaluate their loan through a new downpayment amount
+            reevaluate_loan = data.get('reevaluate_loan')  # no == 0, yes == 1
+            if reevaluate_loan == 0:
+                return jsonify({'message': 'Your yearly income is not sufficient to take on this loan.'}), 400
+            if reevaluate_loan == 1:
+                new_down_payment = data.get('new_down_payment')
+                total_cost = adjust_loan_with_downpayment(vehicle_cost, new_down_payment)
+                new_financing_loan_amount = financingValue(total_cost, monthly_income, credit_score)
+                loan_eligibility = check_loan_eligibility(new_financing_loan_amount, monthly_income)
+                # if true, we can continue to storing everything and all the values !!.
+                if not loan_eligibility:
+                    return jsonify({'message': 'Your yearly income is still not sufficient to take on this loan.'}), 400
+            else:
+                return jsonify({'message': 'Invalid Value'}), 400
+
+        # some stuff before we store in the DB, WE NEED SIGNATURE AND GENERATION OF A DOCUMENT FOR CONFIRMATION OF THE USER BUYUING THE VEHICLE. CONTRACT.
+
+        # Perform the purchase with financing
+        new_payment = Payments(
+            paymentStatus='Confirmed',
+            paymentPerMonth=None,
+            financeLoanAmount=financing_loan_amount,
+            loanRatePercentage=None,  # You may calculate this based on credit score
+            valuePaid=None,
+            valueToPay=None,
+            initialPurchase=None,
+            lastPayment=None,
+            creditScore=credit_score,
+            income=monthly_income,
+            paymentType='CARD',
+            servicePurchased='Vehicle Purchase',
+            cardNumber=card_number,
+            expirationDate=expiration_date,
+            CVV=cvv,
+            routingNumber=None,
+            bankAcctNumber=None,
+            memberID=member_id
+        )
+
+        db.session.add(new_payment)
+        db.session.commit()
+
+        new_purchase = Purchases(
+            paymentID=new_payment.paymentID,
+            VIN_carID=vehicle_vin,
+            memberID=member_id,
+            paymentType=payment_method,
+            bidStatus='Confirmed',  # Assuming the purchase is always confirmed for financing
+            confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
+        )
+
+        db.session.add(new_purchase)
+        db.session.commit()
+
+        return jsonify({'message': 'Vehicle purchase with financing processed successfully.'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/vehicle-purchase/new-bid-insert-no-finance', methods=['POST'])
+def new_bid_purchase_finance():
+    ...
