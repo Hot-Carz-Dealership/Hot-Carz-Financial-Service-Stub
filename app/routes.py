@@ -167,8 +167,10 @@ def current_bids():
 '''This API is used to insert NEW or MODIFY payment data from a customer based on the method and information passed along side of the request'''
 
 
-@app.route('/api/payments/<int:member_id>', methods=['GET', 'POST'])
-def manage_payments(member_id):
+@app.route('/api/payments', methods=['GET', 'POST'])
+def manage_payments():
+    data = request.json
+    member_id = data.get('memberID')
     if request.method == 'GET':
         try:
             # Retrieve payment information for the given memberID
@@ -276,7 +278,7 @@ def manage_payments(member_id):
             return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/vehicle-purchase/new-bid-insert', methods=['POST'])
+@app.route('/api/vehicle-purchase/new-vehicle-no-finance', methods=['POST'])
 def purchase_vehicle():
     member_session_id = session.get('member_session_id')
     if member_session_id is None:
@@ -305,17 +307,21 @@ def purchase_vehicle():
                 return jsonify({'message': 'Card payments are limited to $5000. The rest must be paid in person at '
                                            'the dealership.'}), 400
 
-            msrp_vehicle_purchase_no_financing(vehicle_vin, payment_method, member_id, payment_option, card_number, cvv,
-                                               expiration_date, vehicle_cost, routing_number=None, account_number=None)
+            return msrp_vehicle_purchase_no_financing(vehicle_vin, payment_method, member_id, payment_option,
+                                                      card_number, cvv,
+                                                      expiration_date, vehicle_cost, routing_number=None,
+                                                      account_number=None)
         elif payment_option == 'Check':
             routing_number = data.get('routing_number')
             account_number = data.get('account_number')
 
             regex_bank_acct_check(routing_number, account_number)
 
-            msrp_vehicle_purchase_no_financing(vehicle_vin, payment_method, member_id, payment_option, vehicle_cost,
-                                               card_number=None, cvv=None, expiration_date=None, routing_number=None,
-                                               account_number=None)  # parameter definitions, if there is an error due to
+            return msrp_vehicle_purchase_no_financing(vehicle_vin, payment_method, member_id, payment_option,
+                                                      vehicle_cost,
+                                                      card_number=None, cvv=None, expiration_date=None,
+                                                      routing_number=None,
+                                                      account_number=None)  # parameter definitions, if there is an error due to
             # positioning just fix i cant tell here alone lol
         else:
             return jsonify({'message': 'Invalid payment option for MSRP.'}), 400
@@ -329,15 +335,18 @@ def purchase_vehicle():
 
             regex_card_check(card_number, cvv, expiration_date)
 
-            bid_insert_no_financing(vehicle_vin, payment_method, member_id, bid_value, bid_status, payment_option,
-                                    card_number, cvv, expiration_date, routing_number=None, account_number=None)
+            return bid_insert_no_financing(vehicle_vin, payment_method, member_id, bid_value, bid_status,
+                                           payment_option,
+                                           card_number, cvv, expiration_date, routing_number=None, account_number=None)
         else:
             routing_number = data.get('routing_number')
             account_number = data.get('account_number')
 
             regex_bank_acct_check(routing_number, account_number)
-            bid_insert_no_financing(vehicle_vin, payment_method, member_id, bid_value, bid_status, payment_option,
-                                    routing_number, account_number, card_number=None, cvv=None, expiration_date=None)
+            return bid_insert_no_financing(vehicle_vin, payment_method, member_id, bid_value, bid_status,
+                                           payment_option,
+                                           routing_number, account_number, card_number=None, cvv=None,
+                                           expiration_date=None)
 
     return jsonify({'message': 'Vehicle purchase processed successfully.'}), 200
 
@@ -368,7 +377,7 @@ def regex_bank_acct_check(routing_number, account_number):
     return True
 
 
-@app.route('/api/vehicle-purchase/new-vehicle-purchase-no-finance', methods=['POST'])
+# @app.route('/api/vehicle-purchase/new-vehicle-purchase-no-finance', methods=['POST'])
 def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_method, member_id, payment_option, card_number, cvv,
                                        expiration_date, routing_number, account_number):
     # payment_option = check, card
@@ -376,6 +385,7 @@ def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_method, member_id, p
 
     try:
         # Insert purchase information into the database
+        signature = get_signature()  # don't worry about this rn i have to fix the DB and tables for this
         if payment_method == 'CARD':
             new_payment = Payments(
                 paymentStatus='Confirmed',
@@ -429,6 +439,7 @@ def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_method, member_id, p
             paymentType='MSRP',  # Assuming this is MSRP payment
             bidStatus='Confirmed',  # Assuming the purchase is always confirmed for MSRP
             confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
+            # signature='YES'
         )
 
         db.session.add(new_purchase)
@@ -447,6 +458,7 @@ def bid_insert_no_financing(vehicle_vin, payment_method, member_id, bid_value, b
     # payment_option = check, card
     # payment_method = MSRP, BID
     try:
+        signature = get_signature()
         if payment_option == 'CARD':
             new_payment = Payments(
                 paymentStatus='pending',
@@ -505,7 +517,9 @@ def bid_insert_no_financing(vehicle_vin, payment_method, member_id, bid_value, b
             paymentType=payment_method,
             bidValue=bid_value,
             bidStatus=bid_status,
-            confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
+            confirmationNumber=None
+            # confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
+            # signature='YES'
         )
 
         # Add the new bid to the database session and commit
@@ -520,27 +534,29 @@ def bid_insert_no_financing(vehicle_vin, payment_method, member_id, bid_value, b
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 
-def bid_table_insert(new_payment, vehicle_vin, member_id, payment_method, bid_value, bid_status):
-    try:
-        new_bid = Purchases(
-            paymentID=new_payment.paymentID,
-            VIN_carID=vehicle_vin,
-            memberID=member_id,
-            paymentType=payment_method,
-            bidValue=bid_value,
-            bidStatus=bid_status,
-            confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
-        )
-
-        # Add the new bid to the database session and commit
-        db.session.add(new_bid)
-        db.session.commit()
-
-        return jsonify({'message': 'Bid successfully inserted.'}), 201
-    except Exception as e:
-        # Rollback the transaction in case of an error
-        db.session.rollback()
-        return jsonify({'message': f'Error: {str(e)}'}), 500
+# no point in this function since its already running in all the other ones
+# def bid_table_insert(new_payment, vehicle_vin, member_id, payment_method, bid_value, bid_status):
+#     try:
+#         new_bid = Purchases(
+#             paymentID=new_payment.paymentID,
+#             VIN_carID=vehicle_vin,
+#             memberID=member_id,
+#             paymentType=payment_method,
+#             bidValue=bid_value,
+#             bidStatus=bid_status,
+#             confirmationNumber='NONE'  # You may generate a confirmation number here
+#             # signature='NO'
+#         )
+#
+#         # Add the new bid to the database session and commit
+#         db.session.add(new_bid)
+#         db.session.commit()
+#
+#         return jsonify({'message': 'Bid successfully inserted.'}), 201
+#     except Exception as e:
+#         # Rollback the transaction in case of an error
+#         db.session.rollback()
+#         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 
 def return_vehicle_cost(vehicle_vin):
@@ -614,6 +630,9 @@ def reevaluate_finance():
     data = request.json
     reevaluate_loan = data.get('reevaluate_loan')  # no == 0, yes == 1
     return str(reevaluate_loan)
+
+
+''' API to use to purchase a vehicle at MSRP with financing from the dealership'''
 
 
 @app.route('/api/vehicle-purchase/new-vehicle-purchase-finance', methods=['POST'])
@@ -694,11 +713,8 @@ def new_vehicle_purchase_finance():
         db.session.commit()
 
         # payment stub generation can occur through the means of functions above with endpoints
-        # /api/member/payments
-        # /api/payments/<int:memberid>
-        # honestly look at what the difference is in having the member id passed through the get request from the front end
-        # vs through accessing it through the link through the value still sent through from the front end.
-        # too many ways of doing things gets me confused ahhh
+        # /api/member
+        # /api/payments
 
         return jsonify({'message': 'Vehicle purchase with financing processed successfully.'}), 200
 
@@ -707,7 +723,7 @@ def new_vehicle_purchase_finance():
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 
-@app.route('/api/vehicle-purchase/new-bid-insert-no-finance/signature', methods=['POST'])
+@app.route('/api/vehicle-purchase/signature', methods=['POST'])
 def get_signature():
     data = request.json
     signature = int(data.get('signature'))  # yes = 1, no = 0
