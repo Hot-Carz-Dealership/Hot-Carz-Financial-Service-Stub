@@ -49,7 +49,7 @@ def all_purchases():
     return jsonify({'purchases': purchases_list}), 200
 
 
-@app.route('/api/member/vehicle-purchases/', methods=['GET'])
+@app.route('/api/member/vehicle-purchases', methods=['GET'])
 def member_vehicle_purchases():
     member_session_id = session.get('member_session_id')
 
@@ -79,7 +79,7 @@ def member_vehicle_purchases():
     return jsonify(purchases_info), 200
 
 
-@app.route('/api/member/payments/', methods=['GET'])
+@app.route('/api/member/payments', methods=['GET'])
 def member_purchases():
     member_session_id = session.get('member_session_id')
 
@@ -609,6 +609,13 @@ def adjust_loan_with_downpayment(vehicle_cost, down_payment):
     return loan_amount
 
 
+@app.route('/api/vehicle-purchase/new-vehicle-purchase-finance/re-evaluate', methods=['POST'])
+def reevaluate_finance():
+    data = request.json
+    reevaluate_loan = data.get('reevaluate_loan')  # no == 0, yes == 1
+    return str(reevaluate_loan)
+
+
 @app.route('/api/vehicle-purchase/new-vehicle-purchase-finance', methods=['POST'])
 def new_vehicle_purchase_finance():
     try:
@@ -628,11 +635,11 @@ def new_vehicle_purchase_finance():
 
         loan_eligibility = check_loan_eligibility(financing_loan_amount, monthly_income)
         if not loan_eligibility:
-            # we want to check if the user wants to re evaluate their loan through a new downpayment amount
-            reevaluate_loan = data.get('reevaluate_loan')  # no == 0, yes == 1
+            # we want to check if the user wants to re-evaluate their loan through a new downpayment amount
+            reevaluate_loan = int(reevaluate_finance())
             if reevaluate_loan == 0:
                 return jsonify({'message': 'Your yearly income is not sufficient to take on this loan.'}), 400
-            if reevaluate_loan == 1:
+            elif reevaluate_loan == 1:
                 new_down_payment = data.get('new_down_payment')
                 total_cost = adjust_loan_with_downpayment(vehicle_cost, new_down_payment)
                 new_financing_loan_amount = financingValue(total_cost, monthly_income, credit_score)
@@ -643,7 +650,10 @@ def new_vehicle_purchase_finance():
             else:
                 return jsonify({'message': 'Invalid Value'}), 400
 
-        # some stuff before we store in the DB, WE NEED SIGNATURE AND GENERATION OF A DOCUMENT FOR CONFIRMATION OF THE USER BUYUING THE VEHICLE. CONTRACT.
+        # signature retrival value | ENUM just to ensure we go something and not left blank.
+        signature = get_signature()
+        if signature != 1:
+            return jsonify({'message': 'Please Insert Signature Value'})
 
         # Perform the purchase with financing
         new_payment = Payments(
@@ -677,16 +687,36 @@ def new_vehicle_purchase_finance():
             paymentType=payment_method,
             bidStatus='Confirmed',  # Assuming the purchase is always confirmed for financing
             confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
+            # signature='YES'
         )
 
         db.session.add(new_purchase)
         db.session.commit()
+
+        # payment stub generation can occur through the means of functions above with endpoints
+        # /api/member/payments
+        # /api/payments/<int:memberid>
+        # honestly look at what the difference is in having the member id passed through the get request from the front end
+        # vs through accessing it through the link through the value still sent through from the front end.
+        # too many ways of doing things gets me confused ahhh
 
         return jsonify({'message': 'Vehicle purchase with financing processed successfully.'}), 200
 
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/vehicle-purchase/new-bid-insert-no-finance/signature', methods=['POST'])
+def get_signature():
+    data = request.json
+    signature = int(data.get('signature'))  # yes = 1, no = 0
+    if signature == 0:
+        return False
+    elif signature == 1:
+        return True
+    else:
+        return jsonify({'message': 'Invalid VALUE'}), 400
 
 
 @app.route('/api/vehicle-purchase/new-bid-insert-no-finance', methods=['POST'])
