@@ -12,6 +12,7 @@ from . import app
 from .models import *
 
 ''' all the Financial Services APIs/ENDPOINTS are configured and exposed in this .py file '''
+''' SESSIONS RN ARE BROKEN, WILL GET TO IT TMM, I LITERALLY JUST FIGURED OUT HOW TO EVEN START THIS'''
 
 
 @app.route('/')
@@ -27,13 +28,11 @@ def testdb():
         return hed + error_text
 
 
-'''returns all purchases from the DB'''
-
-
 @app.route('/api/purchases', methods=['GET'])
 def all_purchases():
-    purchases = Purchases.query.all()  # Query all purchases
-    purchases_list = []  # List to store formatted purchases data
+    # returns all purchases from the purchases Table in the DB
+    purchases = Purchases.query.all()  # queries all purchases
+    purchases_list = []
 
     for purchase in purchases:
         purchase_data = {
@@ -53,6 +52,7 @@ def all_purchases():
 
 @app.route('/api/member/vehicle-purchases', methods=['GET'])
 def member_vehicle_purchases():
+    # returns all of the vehicle purchases based on the memberID
     member_session_id = session.get('member_session_id')
 
     if member_session_id is None:

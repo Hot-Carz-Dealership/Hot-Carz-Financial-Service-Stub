@@ -7,6 +7,8 @@ from flask_migrate import Migrate
 from config import Config  # Import the configuration
 
 app = Flask(__name__)
+app.secret_key = 'secret_key'
+
 db_name = 'dealership_backend'
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://root@localhost/' + db_name
