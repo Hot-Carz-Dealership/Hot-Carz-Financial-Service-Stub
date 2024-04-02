@@ -15,6 +15,7 @@ from .models import *
 
 
 @app.route('/')
+# test to make sure it runs and is connected to your DB. if it prints "it works" on your screen, you are connected to the DB correctly.
 def testdb():
     try:
         db.session.query(text('1')).from_statement(text('SELECT 1')).all()
@@ -608,6 +609,10 @@ def reevaluate_finance():
 @app.route('/api/vehicle-purchase/new-vehicle-purchase-finance', methods=['POST'])
 def new_vehicle_purchase_finance():
     try:
+        member_session_id = session.get('member_session_id')
+        if member_session_id is None:
+            return jsonify({'message': 'Invalid session'}), 400
+
         data = request.json
         vehicle_vin = data.get('vehicle_vin')
         payment_method = data.get('payment_method')
@@ -723,6 +728,116 @@ def get_signature():
         return jsonify({'message': 'Invalid VALUE'}), 400
 
 
-@app.route('/api/vehicle-purchase/new-bid-insert-no-finance', methods=['POST'])
+@app.route('/api/vehicle-purchase/bid-confirmed-financed-purchase', methods=['POST'])
 def new_bid_purchase_finance():
-    ...
+    try:
+        member_session_id = session.get('member_session_id')
+        if member_session_id is None:
+            return jsonify({'message': 'Invalid session'}), 400
+
+        data = request.json
+        purchase_id = data.get(
+            'purchase_id')  # value passed from button press from the frontend corresponding to the purchase ID of the Bid
+        member_id = data.get('member_id')
+        payment_method = data.get('payment_method')
+        down_payment = data.get('down_payment')
+        monthly_income = data.get('monthly_income')
+
+        bid_information = Purchases.query.filter_by(purchaseID=purchase_id, paymentType='BID').first()
+        if bid_information:
+            vehicle_vin = bid_information.VIN_carID
+            vehicle_information = Cars.query.filter_by(VIN_carID=vehicle_vin).first()
+            if vehicle_information:
+                if payment_method == 'CARD':
+                    card_number = data.get('card_number')
+                    cvv = data.get('cvv')
+                    expiration_date = data.get('expirationDate')
+                    routingNumber = None
+                    bankAcctNumber = None
+                    if down_payment > 5000:
+                        return jsonify(
+                            {'message': 'Card payments are limited to $5000. The rest must be paid in person at '
+                                        'the dealership.'}), 400
+                else:
+                    routingNumber = data.get('routingNumber')
+                    bankAcctNumber = data.get('bankAcctNumber')
+                    card_number = None
+                    cvv = None
+                    expiration_date = None
+
+                credit_score = creditScoreGenerator()
+                vehicle_cost = return_vehicle_cost(vehicle_vin)
+                total_cost = adjust_loan_with_downpayment(vehicle_cost, down_payment)
+                financing_loan_amount = financingValue(total_cost, monthly_income, credit_score)
+
+                loan_eligibility = check_loan_eligibility(financing_loan_amount, monthly_income)
+                if not loan_eligibility:
+                    # we want to check if the user wants to re-evaluate their loan through a new downpayment amount
+                    reevaluate_loan = int(reevaluate_finance())
+                    if reevaluate_loan == 0:
+                        return jsonify({'message': 'Your yearly income is not sufficient to take on this loan.'}), 400
+                    elif reevaluate_loan == 1:
+                        new_down_payment = data.get('new_down_payment')
+                        total_cost = adjust_loan_with_downpayment(vehicle_cost, new_down_payment)
+                        financing_loan_amount = financingValue(total_cost, monthly_income, credit_score)
+                        loan_eligibility = check_loan_eligibility(financing_loan_amount, monthly_income)
+                        # if true, we can continue to storing everything and all the values !!.
+                        if not loan_eligibility:
+                            return jsonify(
+                                {'message': 'Your yearly income is still not sufficient to take on this loan.'}), 400
+                    else:
+                        return jsonify({'message': 'Invalid Value'}), 400
+
+                # signature retrival value | ENUM just to ensure we go something and not left blank.
+                signature = get_signature()
+                if signature != 1:
+                    return jsonify({'message': 'Please Insert Signature Value'})
+
+                downPayment_value = total_cost - financing_loan_amount
+                valueToPay_value = total_cost - downPayment_value
+                paymentPerMonth_value = financing_loan_amount / 12
+
+                # DB insert for new purchase with financing
+                new_payment = Payments(
+                    paymentStatus='Confirmed',
+                    paymentPerMonth=paymentPerMonth_value,
+                    financeLoanAmount=financing_loan_amount,
+                    loanRatePercentage=credit_score,
+                    valuePaid=downPayment_value,
+                    valueToPay=valueToPay_value,
+                    initialPurchase=datetime.now(),
+                    lastPayment=datetime.now(),
+                    creditScore=credit_score,
+                    income=monthly_income,
+                    paymentType='CARD',
+                    servicePurchased='Vehicle Purchase',
+                    cardNumber=card_number,
+                    expirationDate=expiration_date,
+                    CVV=cvv,
+                    routingNumber=routingNumber,
+                    bankAcctNumber=bankAcctNumber,
+                    memberID=member_id
+                )
+
+                db.session.add(new_payment)
+                db.session.commit()
+
+                new_purchase = Purchases(
+                    paymentID=new_payment.paymentID,
+                    VIN_carID=vehicle_vin,
+                    memberID=member_id,
+                    paymentType=payment_method,
+                    bidStatus='Confirmed',  # Assuming the purchase is always confirmed for financing
+                    confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
+                    # signature='YES'
+                )
+                db.session.add(new_purchase)
+                db.session.commit()
+            else:
+                return jsonify({'error': 'Vehicle not found for the specified purchase ID'}), 404
+        else:
+            return jsonify({'error': 'Bid not found for the specified purchase ID'}), 404
+        return jsonify({'message': 'Vehicle purchase processed successfully.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error: {str(e)}'}), 500
