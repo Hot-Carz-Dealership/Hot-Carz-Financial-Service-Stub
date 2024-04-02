@@ -7,6 +7,7 @@ from datetime import datetime
 
 from flask import jsonify, request, session
 from sqlalchemy import text, func
+from sqlalchemy.orm import joinedload
 
 from . import app
 from .models import *
@@ -37,12 +38,9 @@ def all_purchases():
     for purchase in purchases:
         purchase_data = {
             'purchaseID': purchase.purchaseID,
-            'paymentID': purchase.paymentID,
+            'bidID': purchase.bidID,
             'VIN_carID': purchase.VIN_carID,
             'memberID': purchase.memberID,
-            'paymentType': purchase.paymentType,
-            'bidValue': purchase.bidValue,
-            'bidStatus': purchase.bidStatus,
             'confirmationNumber': purchase.confirmationNumber
         }
         purchases_list.append(purchase_data)
@@ -52,7 +50,7 @@ def all_purchases():
 
 @app.route('/api/member/vehicle-purchases', methods=['GET'])
 def member_vehicle_purchases():
-    # returns all of the vehicle purchases based on the memberID
+    # returns all the vehicle purchases based on the memberID
     member_session_id = session.get('member_session_id')
 
     if member_session_id is None:
@@ -67,18 +65,24 @@ def member_vehicle_purchases():
     purchases_info = []
     for purchase in vehicle_purchases_member:
         car_info = Cars.query.filter_by(VIN_carID=purchase.VIN_carID).first()
+        bid_info = Bids.query.filter_by(bidID=purchase.bidID).first()
+
+        # Access payment type directly from purchase object
+        payment_type = purchase.payment.paymentType
+
         purchases_info.append({
             'purchaseID': purchase.purchaseID,
             'car_make': car_info.make,
             'car_model': car_info.model,
             'car_year': car_info.year,
-            'payment_type': purchase.paymentType,
-            'bid_value': purchase.bidValue,
-            'bid_status': purchase.bidStatus,
+            'payment_type': payment_type,
+            'bid_value': bid_info.bidValue,
+            'bid_status': bid_info.bidStatus,
             'confirmation_number': purchase.confirmationNumber
         })
 
     return jsonify(purchases_info), 200
+
 
 
 @app.route('/api/member/payments', methods=['GET'])
@@ -99,71 +103,55 @@ def member_purchases():
         payment_data = {
             'paymentID': payment.paymentID,
             'paymentStatus': payment.paymentStatus,
-            'paymentPerMonth': payment.paymentPerMonth,
-            'financeLoanAmount': payment.financeLoanAmount,
-            'loanRatePercentage': payment.loanRatePercentage,
             'valuePaid': payment.valuePaid,
             'valueToPay': payment.valueToPay,
             'initialPurchase': payment.initialPurchase,  # Convert to string
             'lastPayment': payment.lastPayment,  # Convert to string
-            'creditScore': payment.creditScore,
-            'income': payment.income,
             'paymentType': payment.paymentType,
-            'servicePurchased': payment.servicePurchased,
             'cardNumber': payment.cardNumber,
             'expirationDate': payment.expirationDate,
             'CVV': payment.CVV,
             'routingNumber': payment.routingNumber,
-            'bankAcctNumber': payment.bankAcctNumber
+            'bankAcctNumber': payment.bankAcctNumber,
+            'memberID': payment.memberID,
+            'financingID': payment.financingID
         }
         payment_info.append(payment_data)
-
     return jsonify(payment_info), 200
 
 
 @app.route('/api/current-bids', methods=['GET', 'POST'])
 def current_bids():
     if request.method == 'GET':
-        # Retrieve information about cars with active bids
-        cars_with_bids = db.session.query(Cars, Purchases) \
-            .join(Purchases, Cars.VIN_carID == Purchases.VIN_carID) \
-            .filter(Purchases.paymentType == 'BID', Purchases.bidStatus == 'Processing') \
-            .all()
-
-        # Format
-        response = [{
-            'make': car.make,
-            'model': car.model,
-            'VIN_carID': car.VIN_carID,
-            'paymentType': purchase.paymentType,
-            'bidValue': purchase.bidValue,
-            'bidStatus': purchase.bidStatus,
-            'confirmationDate': purchase.confirmationNumber
-        } for car, purchase in cars_with_bids]
-
-        return jsonify(response), 200
-
-    elif request.method == 'POST':
-        # we want to either confirm or reject the bid
-        data = request.json
-        VIN_carID = data.get('VIN_carID')
-        bidStatus = data.get('bidStatus')  # pass "Confirmed" or "Denied"
-
-        # Check if both parameters are provided
-        if not (VIN_carID and bidStatus):
-            return jsonify({'error': 'Both VIN_carID and bidStatus parameters are required.'}), 400
-
-        # Update the bid status
-        try:
-            purchase = Purchases.query.filter_by(VIN_carID=VIN_carID, paymentType='BID').first()
+        # Assuming you want to return all current bids
+        bids = Bids.query.all()
+        bid_data = []
+        for bid in bids:
+            purchase = Purchases.query.filter_by(bidID=bid.bidID).first()
             if purchase:
-                purchase.bidStatus = bidStatus
-                db.session.commit()
-                return jsonify({'message': 'Bid status updated successfully'}), 200
-            else:
-                return jsonify({'error': 'No bid found for the specified car'}), 404
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+                car = Cars.query.filter_by(VIN_carID=purchase.VIN_carID).first()
+                if car:
+                    bid_info = {
+                        'make': car.make,
+                        'model': car.model,
+                        'VIN': car.VIN_carID,
+                        'MSRP': car.price,
+                        'bidValue': bid.bidValue,
+                        'bidStatus': bid.bidStatus
+                    }
+                    bid_data.append(bid_info)
+        return jsonify(bid_data)
+    elif request.method == 'POST':
+        data = request.json
+        bid_id = data.get('bidID')
+        confirmation_status = data.get('confirmationStatus')
+        bid = Bids.query.get(bid_id)
+        if bid:
+            bid.bidStatus = confirmation_status
+            db.session.commit()
+            return jsonify({'message': 'Bid status updated successfully'})
+        else:
+            return jsonify({'error': 'Bid not found'}), 404
 
 
 @app.route('/api/vehicle-purchase/new-vehicle-no-finance/bid-accepted', methods=['POST'])
