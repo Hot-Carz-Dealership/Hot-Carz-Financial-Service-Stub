@@ -12,7 +12,6 @@ from . import app
 from .models import *
 
 ''' all the Financial Services APIs/ENDPOINTS are configured and exposed in this .py file '''
-''' SESSIONS RN ARE BROKEN, WILL GET TO IT TMM, I LITERALLY JUST FIGURED OUT HOW TO EVEN START THIS'''
 
 
 @app.route('/')
@@ -29,6 +28,7 @@ def testdb():
 
 
 @app.route('/api/purchases', methods=['GET'])
+# this endpoint returns all of the purchase information to be viewed by the manager or superAdmin
 def all_purchases():
     # returns all purchases from the purchases Table in the DB
     purchases = Purchases.query.all()  # queries all purchases
@@ -48,15 +48,14 @@ def all_purchases():
 
 
 @app.route('/api/member/vehicle-purchases', methods=['GET'])
+# this endpoint is used to return all vehicle purchase information for an authorized customer to view their past vehicle purchases
 def member_vehicle_purchases():
-    # returns all the vehicle purchases based on the memberID
-    member_session_id = session.get('member_session_id')
-
+    member_session_id = session.get('member_session_id')  # sessions with Auth for a member who has bought a customer
     if member_session_id is None:
         return jsonify({'message': 'No session id provided'}), 404
 
-    vehicle_purchases_member = Purchases.query.filter_by(memberID=member_session_id).all()
-
+    vehicle_purchases_member = Purchases.query.filter_by(
+        memberID=member_session_id).all()  # returns vehicles purchased by the customer/member
     if not vehicle_purchases_member:
         return jsonify({'message': 'No purchases found for this member'}), 404
 
@@ -79,23 +78,22 @@ def member_vehicle_purchases():
             'bid_status': bid_info.bidStatus,
             'confirmation_number': purchase.confirmationNumber
         })
-
     return jsonify(purchases_info), 200
 
 
 @app.route('/api/member/payments', methods=['GET'])
+# this endpoint is used to return the payment informations of the member who is authorized into the dealership and logged in
 def member_purchases():
     member_session_id = session.get('member_session_id')
-
     if member_session_id is None:
         return jsonify({'message': 'No session id provided'}), 404
 
-    payments_member = Payments.query.filter_by(memberID=member_session_id).all()
-
+    payments_member = Payments.query.filter_by(
+        memberID=member_session_id).all()  # returns all payment information of the member
     if not payments_member:
         return jsonify({'message': 'No purchases found for this member'}), 404
 
-    # Extract necessary purchase details
+    # returns necessary purchase details
     payment_info = []
     for payment in payments_member:
         payment_data = {
@@ -121,7 +119,7 @@ def member_purchases():
 @app.route('/api/current-bids', methods=['GET', 'POST'])
 def current_bids():
     if request.method == 'GET':
-        # Assuming you want to return all current bids
+        # GET Protocol, you want to return all current bids
         bids = Bids.query.all()
         bid_data = []
         for bid in bids:
@@ -153,24 +151,30 @@ def current_bids():
             return jsonify({'error': 'Bid not found'}), 404
 
 
-#################
 @app.route('/api/vehicle-purchase/new-vehicle-no-finance/bid-accepted', methods=['POST'])
+# this endpoint is used for the customer to Purchase their cars AFTER their bid had been accepted
+# here we only deal with the Purchases and Payments Table
 def vehicle_purchase_bid_accepted():
     try:
-        # here we only deal with the Purchases and Payments Table
+        # make sure the member is logged in and has an account to purchase a vehicle and it logged in
         member_session_id = session.get('member_session_id')
         if member_session_id is None:
             return jsonify({'message': 'Invalid session'}), 400
 
+        # get information sent from the frontend to here
+        # Frontend needs to send: bid_id, payment_option, member_id, payment_amount
         data = request.json
         bid_id = data.get('bid_id')
         payment_option = data.get('payment_option')  # 'Card' or 'Check'
         member_id = data.get('member_id')
         payment_amount = data.get('payment_amount')
+
+        # returns the row in BID table that matches with our bid_id
         bid = Bids.query.get(bid_id)
         if not bid or bid.bidStatus != 'Confirmed':
             return jsonify({'message': 'Bid not found or is Not Confirmed, Cannot continue with Purchase'}), 404
 
+        # returns vehicle information for purchase for the vehicle to be bought
         vehicle = Cars.query.filter_by(VIN_carID=bid.VIN_carID).first()
         if not vehicle:
             return jsonify({'message': 'Vehicle not found for this bid'}), 404
@@ -183,7 +187,7 @@ def vehicle_purchase_bid_accepted():
             routing_number = None
             account_number = None
             regex_card_check(card_number, cvv, expiration_date)
-            if payment_amount > 5000:
+            if payment_amount > 5000:  # cards cannot pay more than 5000
                 return jsonify({'message': 'Choose A lower value for Bank Cards'}), 400
         elif payment_option == 'Check':
             routing_number = data.get('routing_number')
@@ -200,7 +204,7 @@ def vehicle_purchase_bid_accepted():
         total_valuePaid = bid.bidValue - payment_amount
         # signature = get_signature()
 
-        # Create a payment entry
+        # create a payment entry to insert into the DB for the new payment/purchase information
         new_payment = Payments(
             paymentStatus='Confirmed',
             valuePaid=payment_amount,
@@ -215,7 +219,6 @@ def vehicle_purchase_bid_accepted():
             bankAcctNumber=account_number,
             memberID=member_id
         )
-
         db.session.add(new_payment)
         db.session.commit()
 
@@ -225,7 +228,6 @@ def vehicle_purchase_bid_accepted():
             confirmationNumber=confirmation_number_generation(),  # You may generate a confirmation number here
             # signature=signature_val
         )
-
         db.session.add(new_purchase)
         db.session.commit()
         return jsonify({'message': 'Vehicle purchase processed successfully.'}), 200
@@ -233,16 +235,17 @@ def vehicle_purchase_bid_accepted():
         return jsonify({'error': 'Bid not found for the specified member and vehicle, could not purchase vehicle'}), 404
 
 
-'''This API is used to insert NEW or MODIFY payment data from a customer based on the method and information passed along side of the request'''
-
-
 @app.route('/api/payments', methods=['GET', 'POST'])
 def manage_payments():
-    data = request.json
-    member_id = data.get('memberID')
+    # GET protocol returns all payement information based on the passed memberID
+    # POST protocol is to be used by user for inserting new payments for their purchases. All the information for these
+    # new changes are sent from the fronend
     if request.method == 'GET':
         try:
-            # Retrieve payment information for the given memberID
+            # retrieve payment information from the given memberID
+            # ONLY PASS the memberID into GET request
+            data = request.json
+            member_id = data.get('memberID')
             payments = Payments.query.filter_by(memberID=member_id).all()
             payments_info = []
             for payment in payments:
@@ -269,7 +272,7 @@ def manage_payments():
 
     elif request.method == 'POST':
         try:
-            # Extract data from the request body
+            # PASS ALL THESE VALUES INTO POST REQUEST
             data = request.json
             member_id_request = data.get('memberID')
             payment_status = data.get('paymentStatus')
@@ -305,7 +308,7 @@ def manage_payments():
                 existing_payment.memberID = memberID_insert
                 existing_payment.financingID = financingID_insert
             else:
-                # Create new payment information
+                # Create new payment information if there is no payment information
                 new_payment = Payments(paymentStatus=payment_status,
                                        valuePaid=value_paid,
                                        valueToPay=value_to_pay,
@@ -320,11 +323,10 @@ def manage_payments():
                                        memberID=memberID_insert,
                                        financingID=financingID_insert
                                        )
+
+                # commit changes into the DB
                 db.session.add(new_payment)
-
-            # Commit changes to the database
-            db.session.commit()
-
+                db.session.commit()
             return jsonify({'message': 'Payment information updated successfully'}), 200
         except Exception as e:
             # Rollback the session in case of any exception
@@ -333,12 +335,15 @@ def manage_payments():
 
 
 @app.route('/api/vehicle-purchase/new-vehicle-no-finance', methods=['POST'])
+# POST request is used by the customer to purchase a new Vehicle at BID or MSRP with NO FINANCING
 def purchase_vehicle():
+    # ensure that the member is logged in and has an account
     member_session_id = session.get('member_session_id')
     if member_session_id is None:
         # redirect the user at this point to a login screen if they are not logged in to an account to purchase a vehicle
         return jsonify({'message': 'You need to log in to purchase a vehicle.'}), 401
 
+    # information from the frontend they have to pass to the backend is all below
     data = request.json
     vehicle_vin = data.get('vehicle_vin')
     if vehicle_vin == -1:
@@ -386,6 +391,7 @@ def purchase_vehicle():
         else:
             return jsonify({'message': 'Invalid payment option for MSRP.'}), 400
     else:
+        # BIDDING and not purchasing right then and there.
         bid_value = data.get('bidValue')
         bid_status = 'Processing'  # not sent from the frontend. The change to Confirmed/Denied
         return bid_insert_no_financing(member_id, bid_value, bid_status)
@@ -407,6 +413,7 @@ def regex_card_check(card_number: str, cvv: str, expiration_date: str) -> bool:
 
 
 def regex_bank_acct_check(routing_number: str, account_number: str) -> bool:
+    # regec validation for the routing number and account number to be correct
     routing_regex = re.compile(r'^[0-9]{9}$')
     account_regex = re.compile(r'^[0-9]{9,12}$')  # Bank account numbers vary from 9 to 12 char length
 
@@ -424,6 +431,8 @@ def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, p
     # payment_option = check, card
     # payment_method = MSRP, BID
     # here we only deal with Purchases and Payments table
+    # we insert these values into the table
+    # we do grab a signature and store but that will be later in development
 
     try:
         # Insert purchase information into the database
@@ -475,9 +484,8 @@ def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, p
 
 @app.route('/api/vehicle-purchase/new-bid-insert', methods=['POST'])
 def bid_insert_no_financing(member_id, bid_value, bid_status):
-    # payment_option = check, card
-    # payment_method = MSRP, BID
     # Here we only deal with the Bids Table
+    # Here we only deal with inserting NEW bids into the backend with no financing
     try:
         # Create a new bid entry
         new_bid = Bids(
@@ -497,6 +505,7 @@ def bid_insert_no_financing(member_id, bid_value, bid_status):
 
 
 def return_vehicle_cost(vehicle_vin):
+    # we return the cost of the vehicle here based on the vehicle_vin passed into the function
     vehicle = Cars.query.filter_by(VIN_carID=vehicle_vin).first()
     if not vehicle:
         return -1
@@ -517,8 +526,8 @@ def charCompany(cardNumber: str) -> str:
         return 'Other'
 
 
-# this function generates the confirmation number randomely
 def confirmation_number_generation() -> str:
+    # this function generates the confirmation number randomely
     total_chars = string.ascii_uppercase + string.digits
     return ''.join(random.choice(total_chars) for i in range(13))
 
@@ -542,12 +551,12 @@ def interest_rate(creditScore: int) -> int:
 
 def financingValue(vehicleCost: int, monthlyIncome: int, creditscore: int) -> float:
     # may be scuffed because I need to know more on more accurate rates but this might be ok
+    # generates the finance loan value
 
     base_loan_interest_rate = interest_rate(creditscore)
     # Calculate financing value based on vehicle cost and monthly income
     final_financing_percentage = base_loan_interest_rate + ((vehicleCost / monthlyIncome) * 100)
     financing_loan_value = (final_financing_percentage / 100) * vehicleCost
-
     return financing_loan_value
 
 
@@ -570,6 +579,7 @@ def adjust_loan_with_downpayment(vehicle_cost, down_payment):
 
 @app.route('/api/vehicle-purchase/new-vehicle-purchase-finance/re-evaluate', methods=['POST'])
 def reevaluate_finance():
+    # used as a means of re evaluating the loan and whether the user wants to or not and it will lead to a new downpayment
     data = request.json
     reevaluate_loan = data.get('reevaluate_loan')  # no == 0, yes == 1
     return str(reevaluate_loan)
@@ -581,11 +591,14 @@ def reevaluate_finance():
 @app.route('/api/vehicle-purchase/new-vehicle-purchase-finance', methods=['POST'])
 def new_vehicle_purchase_finance():
     # here we deal with Financing, Purchases and Payments table
+    # HERE we deal with purchases of vehicles WITH FINANCING
     try:
+        # customer auth for making sure they are logged in and have an account
         member_session_id = session.get('member_session_id')
         if member_session_id is None:
             return jsonify({'message': 'Invalid session'}), 400
 
+        # frontend needs to send these values to the backend
         data = request.json
         vehicle_vin = data.get('vehicle_vin')
         payment_method = data.get('payment_method')
@@ -616,21 +629,23 @@ def new_vehicle_purchase_finance():
 
         total_cost = adjust_loan_with_downpayment(vehicle_cost, down_payment)
         financing_loan_amount = financingValue(total_cost, monthly_income, credit_score)
-        loan_eligibility = check_loan_eligibility(financing_loan_amount, monthly_income)
 
+        # Loan eligibility
+        loan_eligibility = check_loan_eligibility(financing_loan_amount, monthly_income)
         if not loan_eligibility:
-            # we want to check if the user wants to re-evaluate their loan through a new downpayment amount
+            # we want to check if the user wants to re-evaluate their loan through a new down payment amount
             reevaluate_loan = int(reevaluate_finance())
-            if reevaluate_loan == 0:
+            if reevaluate_loan == 0:  # they cannot purchase the vehicle
                 return jsonify({'message': 'Your yearly income is not sufficient to take on this loan.'}), 400
-            elif reevaluate_loan == 1:
+            elif reevaluate_loan == 1:  # they can and the frontend needs to send a new downpayment, this may need a new endpoint so LMK frontend
                 new_down_payment = data.get('new_down_payment')
                 total_cost = adjust_loan_with_downpayment(vehicle_cost, new_down_payment)
                 financing_loan_amount = financingValue(total_cost, monthly_income, credit_score)
                 loan_eligibility = check_loan_eligibility(financing_loan_amount, monthly_income)
                 # if true, we can continue to storing everything and all the values !!.
                 if not loan_eligibility:
-                    return jsonify({'message': 'Your yearly income is still not sufficient to take on this loan.'}), 400
+                    return jsonify({
+                        'message': 'Your yearly income is still not sufficient to take on this loan.'}), 400  # they cannot purchase this vehicle
             else:
                 return jsonify({'message': 'Invalid Value'}), 400
 
@@ -639,20 +654,22 @@ def new_vehicle_purchase_finance():
         # if signature != 1:
         #     return jsonify({'message': 'Please Insert Signature Value'})
 
+        # ik its long here but im tight on time imma just make it here and MAY refactor later
+
         downPayment_value = total_cost - financing_loan_amount
         valueToPay_value = total_cost - downPayment_value
         paymentPerMonth_value = financing_loan_amount / 12
 
+        # insertion of new Financing, Payments and Purchases Tables
         new_financing = Financing(
             memberID=member_id,
             income=int(monthly_income) * 12,
             credit_score=credit_score,
             loan_total=financing_loan_amount,
             down_payment=downPayment_value,
-            # redo this one
             percentage=interest_rate(credit_score),
             monthly_sum=paymentPerMonth_value,
-            remaining_months=48  # Assuming a 12-month financing term
+            remaining_months=48
         )
         db.session.add(new_financing)
         db.session.commit()
@@ -673,7 +690,6 @@ def new_vehicle_purchase_finance():
             bankAcctNumber=bankAcctNumber,
             memberID=member_id
         )
-
         db.session.add(new_payment)
         db.session.commit()
 
@@ -684,7 +700,6 @@ def new_vehicle_purchase_finance():
             confirmationNumber=confirmation_number_generation()  # You may generate a confirmation number here
             # signature='YES'
         )
-
         db.session.add(new_purchase)
         db.session.commit()
 
@@ -693,33 +708,35 @@ def new_vehicle_purchase_finance():
         # /api/payments
 
         return jsonify({'message': 'Vehicle purchase with financing processed successfully.'}), 200
-
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 
-@app.route('/api/vehicle-purchase/signature', methods=['POST'])
-def get_signature():
-    data = request.json
-    signature = int(data.get('signature'))  # yes = 1, no = 0
-    if signature == 0:
-        return 'NO'
-    elif signature == 1:
-        return 'YES'
-    else:
-        return jsonify({'message': 'Invalid VALUE'}), 400
+# not in use yet
+# @app.route('/api/vehicle-purchase/signature', methods=['POST'])
+# def get_signature():
+#     data = request.json
+#     signature = int(data.get('signature'))  # yes = 1, no = 0
+#     if signature == 0:
+#         return 'NO'
+#     elif signature == 1:
+#         return 'YES'
+#     else:
+#         return jsonify({'message': 'Invalid VALUE'}), 400
 
 
-#######################
 @app.route('/api/vehicle-purchase/bid-confirmed-financed-purchase', methods=['POST'])
 def new_bid_purchase_finance():
     # here we deal with the bid, purchases, payments and finance tables
+    # HERE we deal with Bid that are confimed and being purchased with FINANCING
     try:
+        # customer auth for making sure they are logged in and have an account
         member_session_id = session.get('member_session_id')
         if member_session_id is None:
             return jsonify({'message': 'Invalid session'}), 400
 
+        # frontend needs to send these values to the backend
         data = request.json
         bid_id = data.get('bid_id')
         member_id = data.get('member_id')
@@ -727,14 +744,17 @@ def new_bid_purchase_finance():
         down_payment = data.get('down_payment')
         monthly_income = data.get('monthly_income')
 
+        # returns data on the bid we need that the customer is purchasing
         bid = Bids.query.get(bid_id)
         if not bid or bid.bidStatus != 'Confirmed':
             return jsonify({'message': 'Bid not found or is Not Confirmed, Cannot continue with Purchase'}), 404
 
+        # return purchasing information on the vehicle to be purchased, we need the information not COST since we are buying based on an approved BID
         vehicle = Cars.query.filter_by(VIN_carID=bid.VIN_carID).first()
         if not vehicle:
             return jsonify({'message': 'Vehicle not found for this bid'}), 404
 
+        # more processing
         if payment_method == 'CARD':
             card_number = data.get('card_number')
             cvv = data.get('cvv')
@@ -754,8 +774,9 @@ def new_bid_purchase_finance():
         credit_score = creditScoreGenerator()  # Assuming this function exists and works correctly
         vehicle_cost = vehicle.price
         total_cost = adjust_loan_with_downpayment(vehicle_cost, down_payment)
-        financing_loan_amount = financingValue(total_cost, monthly_income, credit_score)
 
+        # Loan Eligibility | the same as the other loan operations in buying the vehicle at MSRP with financing
+        financing_loan_amount = financingValue(total_cost, monthly_income, credit_score)
         loan_eligibility = check_loan_eligibility(financing_loan_amount, monthly_income)
         if not loan_eligibility:
             reevaluate_loan = int(reevaluate_finance())
@@ -771,14 +792,15 @@ def new_bid_purchase_finance():
             else:
                 return jsonify({'message': 'Invalid Value'}), 400
 
-        signature = get_signature()  # Assuming this function exists and works correctly
-        if signature != 1:
-            return jsonify({'message': 'Please Insert Signature Value'}), 400
+        # signature = get_signature()  # Assuming this function exists and works correctly
+        # if signature != 1:
+        #     return jsonify({'message': 'Please Insert Signature Value'}), 400
 
         downPayment_value = total_cost - financing_loan_amount
         valueToPay_value = total_cost - downPayment_value
         paymentPerMonth_value = financing_loan_amount / 12
 
+        # inserts new values on the purchase based on Financing, Payments, Purchases
         new_financing = Financing(
             memberID=member_id,
             income=monthly_income,
@@ -787,7 +809,7 @@ def new_bid_purchase_finance():
             down_payment=downPayment_value,
             percentage=interest_rate(credit_score),
             monthly_sum=paymentPerMonth_value,
-            remaining_months=48  # Assuming a 12-month financing term
+            remaining_months=48
         )
         db.session.add(new_financing)
         db.session.commit()
@@ -817,14 +839,11 @@ def new_bid_purchase_finance():
             confirmationNumber=confirmation_number_generation(),  # You may generate a confirmation number here
             # signature=signature_val
         )
-
         db.session.add(new_purchase)
         db.session.commit()
 
         # no need to modify Bid Status since its already been confirmed.
-
         return jsonify({'message': 'Vehicle purchase with financing processed successfully.'}), 200
-
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
