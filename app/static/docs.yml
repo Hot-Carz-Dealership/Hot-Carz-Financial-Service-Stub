@@ -1,0 +1,285 @@
+openapi: 3.0.0
+info:
+  title: Flask Dealership API
+  description: APIs for managing dealership operations
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+paths:
+  /:
+    get:
+      summary: Test DB Connection
+      description: Test to make sure the application is running and connected to the database.
+      responses:
+        '200':
+          description: It works
+  /api/purchases:
+    get:
+      summary: Get All Purchases
+      description: Returns all purchase information.
+      responses:
+        '200':
+          description: Successful operation
+    post:
+      summary: Create a Purchase
+      description: Endpoint to create a new purchase (not implemented).
+      responses:
+        '501':
+          description: Not Implemented
+  /api/member/vehicle-purchases:
+    get:
+      summary: Get Vehicle Purchases for Member
+      description: Returns vehicle purchase information for an authorized member.
+      responses:
+        '200':
+          description: Successful operation
+    parameters:
+      - name: session_id
+        in: query
+        description: Session ID of the member
+        required: true
+        schema:
+          type: string
+  /api/member/payments:
+    get:
+      summary: Get Payments for Member
+      description: Returns payment information for an authorized member.
+      responses:
+        '200':
+          description: Successful operation
+    parameters:
+      - name: session_id
+        in: query
+        description: Session ID of the member
+        required: true
+        schema:
+          type: string
+  /api/current-bids:
+    get:
+      summary: Get Current Bids
+      description: Returns all current bids.
+      responses:
+        '200':
+          description: Successful operation
+    post:
+      summary: Update Bid Status
+      description: Update bid status as confirmed or declined by managers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bidID:
+                  type: integer
+                  description: ID of the bid to update
+                  example: 123
+                confirmationStatus:
+                  type: string
+                  enum: [ confirmed, declined ]
+                  description: New status of the bid
+                  example: confirmed
+      responses:
+        '200':
+          description: Bid status updated successfully
+        '404':
+          description: Bid not found
+        '501':
+          description: Not Implemented
+  /api/vehicle-purchase/new-vehicle-no-finance:
+    post:
+      summary: Purchase Vehicle (No Financing)
+      description: Purchase a new vehicle at bid or MSRP with no financing.
+      operationId: purchaseVehicle
+      responses:
+        '200':
+          description: Vehicle purchase processed successfully
+        '400':
+          description: |
+            CAR DOESNT EXIST
+            Card payments are limited to $5000. The rest must be paid in person at the dealership.
+        '401':
+          description: You need to log in to purchase a vehicle
+        '500':
+          description: Internal Server Error
+  /api/vehicle-purchase/new-vehicle-no-finance/bid-accepted:
+    post:
+      summary: Purchase Vehicle (Bid Accepted)
+      description: Purchase a vehicle after the bid has been accepted.
+      operationId: vehiclePurchaseBidAccepted
+      responses:
+        '200':
+          description: Vehicle purchase processed successfully
+        '400':
+          description: Bid not found or is Not Confirmed, Cannot continue with Purchase
+        '401':
+          description: Invalid session
+        '404':
+          description: Bid not found for the specified member and vehicle, could not purchase vehicle
+        '500':
+          description: Internal Server Error
+  /api/payments:
+    get:
+      summary: Get Payments
+      description: Retrieve payment information based on the memberID.
+      operationId: managePaymentsGet
+      responses:
+        '200':
+          description: Payment information retrieved successfully
+        '500':
+          description: Internal Server Error
+    post:
+      summary: Create Payment
+      description: Create new payment information for purchases.
+      operationId: managePaymentsPost
+      responses:
+        '200':
+          description: Payment information updated successfully
+        '500':
+          description: Internal Server Error
+  /api/vehicle-purchase/new-bid-insert:
+    post:
+      summary: Insert New Bid (No Financing)
+      description: Insert a new bid into the backend with no financing.
+      operationId: bidInsertNoFinancing
+      responses:
+        '201':
+          description: Bid successfully inserted
+        '500':
+          description: Internal Server Error
+  /api/vehicle-purchase/new-vehicle-purchase-finance/re-evaluate:
+    post:
+      summary: Re-evaluate Finance
+      description: Re-evaluate the loan and down payment for a vehicle purchase with financing.
+      operationId: reevaluateFinance
+      responses:
+        '200':
+          description: Re-evaluation completed successfully
+  /api/vehicle-purchase/new-vehicle-purchase-finance:
+    post:
+      summary: New Vehicle Purchase with Financing
+      description: Purchase a new vehicle with financing.
+      operationId: newVehiclePurchaseFinance
+      responses:
+        '200':
+          description: Vehicle purchase with financing processed successfully
+        '400':
+          description: Invalid session or vehicle not listed
+        '500':
+          description: Internal Server Error
+  /api/vehicle-purchase/bid-confirmed-financed-purchase:
+    post:
+      summary: Process a new bid purchase with financing
+      responses:
+        200:
+          description: Vehicle purchase with financing processed successfully
+        400:
+          description: Bad request. Check the request payload.
+        404:
+          description: Bid not found or not confirmed. Cannot proceed with purchase.
+        500:
+          description: Internal server error. Something went wrong on the server side.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bid_id:
+                  type: integer
+                  description: The ID of the bid being purchased
+                  example: 123
+                member_id:
+                  type: integer
+                  description: The ID of the member making the purchase
+                  example: 456
+                payment_method:
+                  type: string
+                  description: The payment method used for the purchase (CARD/BANK)
+                  example: CARD
+                down_payment:
+                  type: number
+                  description: The amount of down payment
+                  example: 5000
+                monthly_income:
+                  type: number
+                  description: The monthly income of the member
+                  example: 5000
+                card_number:
+                  type: string
+                  description: The card number if payment method is CARD
+                  example: 1234567812345678
+                cvv:
+                  type: string
+                  description: The CVV number if payment method is CARD
+                  example: 123
+                expiration_date:
+                  type: string
+                  description: The expiration date of the card if payment method is CARD
+                  example: 12/24
+                routingNumber:
+                  type: string
+                  description: The routing number if payment method is BANK
+                  example: 123456789
+                bankAcctNumber:
+                  type: string
+                  description: The bank account number if payment method is BANK
+                  example: 987654321
+                new_down_payment:
+                  type: number
+                  description: The new down payment if reevaluation is required
+                  example: 3000
+components:
+  schemas:
+    VehiclePurchaseInput:
+      type: object
+      properties:
+        vehicle_vin:
+          type: string
+        payment_method:
+          type: string
+          enum: [ MSRP, BID ]
+        payment_amount:
+          type: number
+        member_id:
+          type: integer
+        payment_option:
+          type: string
+          enum: [ Card, Check ]
+        card_number:
+          type: string
+        expirationDate:
+          type: string
+          format: date
+        CVV:
+          type: string
+        routingNumber:
+          type: string
+        account_number:
+          type: string
+      required:
+        - vehicle_vin
+        - payment_method
+        - payment_amount
+        - member_id
+        - payment_option
+  BidInsertInput:
+    type: object
+    properties:
+      member_id:
+        type: integer
+      bid_value:
+        type: number
+      bid_status:
+        type: string
+    required:
+      - member_id
+      - bid_value
+      - bid_status
+
+
+
+
+
