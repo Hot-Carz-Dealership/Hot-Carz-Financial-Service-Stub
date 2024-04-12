@@ -33,7 +33,13 @@ class Member(db.Model):
     last_name = db.Column(db.String(100))
     email = db.Column(db.String(100))
     phone = db.Column(db.String(20))
+    address = db.Column(db.String(255))
+    state = db.Column(db.String(2))
+    zipcode = db.Column(db.String(5))
     join_date = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
+
+    # Define relationship with MemberSensitiveInfo
+    sensitive_info = db.relationship('MemberSensitiveInfo', back_populates='member')
 
 
 class TestDrive(db.Model):
@@ -46,21 +52,37 @@ class TestDrive(db.Model):
     confirmation = db.Column(Enum('Confirmed', 'Denied', 'Cancelled', 'Awaiting Confirmation'))
 
 
+class Services(db.Model):
+    __tablename__ = 'Services'
+    serviceID = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    service_name = db.Column(db.String(255))
+
+
 class ServiceAppointment(db.Model):
     # ServiceAppointment table model
     __tablename__ = 'ServiceAppointment'
     appointment_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
+    serviceID = db.Column(db.Integer, ForeignKey('Services.serviceID'))
     appointment_date = db.Column(db.DATE)
-    service_name = db.Column(db.String(100))
+    comments = db.Column(db.TEXT)
+    status = db.Column(Enum('Scheduled', 'Done'))
+    last_modified = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+
+
+class ServiceAppointmentEmployeeAssignments(db.Model):
+    __tablename__ = 'ServiceAppointmentEmployeeAssignments'
+    assignmentID = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    appointment_id = db.Column(db.Integer, ForeignKey('ServiceAppointment.appointment_id'))
+    employeeID = db.Column(db.Integer, ForeignKey('Employee.employeeID'))
 
 
 class Employee(db.Model):
     # Employee table model
     __tablename__ = 'Employee'
     employeeID = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    firstname = db.Column(db.String(50))
-    lastname = db.Column(db.String(50))
+    first_name = db.Column(db.String(50))
+    last_name = db.Column(db.String(50))
     email = db.Column(db.String(100))
     phone = db.Column(db.String(20))
     address = db.Column(db.String(255))
@@ -91,6 +113,8 @@ class MemberSensitiveInfo(db.Model):
     cardInfo = db.Column(db.TEXT)
     lastModified = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(),
                              onupdate=db.func.current_timestamp())
+    # Define relationship with Member
+    member = db.relationship('Member', back_populates='sensitive_info')
 
 
 class Financing(db.Model):
