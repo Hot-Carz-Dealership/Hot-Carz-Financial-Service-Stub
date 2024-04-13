@@ -6,12 +6,14 @@ import string
 from datetime import datetime
 
 from flask import jsonify, request, session
-from sqlalchemy import text
+from sqlalchemy import text, desc
 
 from . import app
 from .models import *
 
 ''' all the Financial Services APIs/ENDPOINTS are configured and exposed in this .py file '''
+
+'''ALL PURCHASES ARE NOW ONLY MADE WITH BANK ROUTING AND ACCT NUMBER'''
 
 
 @app.route('/')
@@ -278,103 +280,108 @@ def payment_report():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/payments', methods=['GET', 'POST'])
+@app.route('/api/customer/make-payment', methods=['POST'])
 def manage_payments():
-    # GET protocol returns all payement information based on the passed memberID
     # POST protocol is to be used by user for inserting new payments for their purchases. All the information for these
-    # new changes are sent from the fronend
-    if request.method == 'GET':
-        try:
-            # retrieve payment information from the given memberID
-            # ONLY PASS the memberID into GET request
-            data = request.json
-            member_id = data.get('memberID')
-            payments = Payments.query.filter_by(memberID=member_id).all()
-            payments_info = []
-            for payment in payments:
-                payment_data = {
-                    'paymentID': payment.paymentID,
-                    'paymentStatus': payment.paymentStatus,
-                    'valuePaid': payment.valuePaid,
-                    'valueToPay': payment.valueToPay,
-                    'initialPurchase': payment.initialPurchase,  # Convert to string
-                    'lastPayment': payment.lastPayment,  # Convert to string
-                    'paymentType': payment.paymentType,
-                    'cardNumber': payment.cardNumber,
-                    'expirationDate': payment.expirationDate,
-                    'CVV': payment.CVV,
-                    'routingNumber': payment.routingNumber,
-                    'bankAcctNumber': payment.bankAcctNumber,
-                    'memberID': payment.memberID,
-                    'financingID': payment.memberID
-                }
-                payments_info.append(payment_data)
-            return jsonify({'payments': payments_info}), 200
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+    try:
+        # ensure that members are logged in and exist
+        member_id = session.get('member_session_id')
+        if not member_id:
+            return jsonify({'message': 'Unauthorized access'}), 401
 
-    elif request.method == 'POST':
-        try:
-            # PASS ALL THESE VALUES INTO POST REQUEST
-            data = request.json
-            member_id_request = data.get('memberID')
-            payment_status = data.get('paymentStatus')
+        # Ensure that the employee is a Manager
+        member = Member.query.filter_by(memberID=member_id).first()
+        if member is None:
+            return jsonify({'message': 'Unauthorized access'}), 401
+
+        data = request.json  # Assuming JSON data is sent in the request
+
+        # Check if it's a vehicle purchase or a service payment
+        purchase_type = data.get('paymentType')
+        if purchase_type == 'Vehicle/Add-on Continuing Payment':
+            # Vehicle purchase payment
+            purchase_id = data.get('purchaseID')
+
+            # this search is done for continuing purchases on vehicles already bought
+            # we match the incomming sent from the frontend purchase ID with the memberID to make sure they match
+            purchase = Purchases.query.filter_by(purchaseID=purchase_id, memberID=member_id).first()
+
+            if purchase is None:
+                return jsonify({'message': 'Invalid purchase ID for additional payments to be made on the car'}), 400
+
             value_paid = data.get('valuePaid')
-            value_to_pay = data.get('valueToPay')
-            initial_purchase = data.get('initialPurchase')
-            last_payment = data.get('lastPayment')
-            payment_type = data.get('paymentType')
-            card_number = data.get('cardNumber')
-            expiration_date = data.get('expirationDate')
-            cvv = data.get('CVV')
+
+            # update the value to continue paying
+            purchase.valueToPay -= value_paid
+            purchase.save()
+
+            # Create a new payment record
+            new_payment = Payments(
+                paymentStatus='Completed',
+                valuePaid=value_paid,
+                valueToPay=purchase.valueToPay,
+                initialPurchase=purchase.initialPurchase,
+                lastPayment=datetime.now(),
+                paymentType='Check/Bank Account',
+                cardNumber=None,
+                expirationDate=None,
+                CVV=None,
+                routingNumber=purchase.routingNumber,
+                bankAcctNumber=member.bankAcctNumber,
+                memberID=member_id,
+                financingID=purchase.financingID
+            )
+            db.session.add(new_payment)
+        elif purchase_type == 'Service Payment':
+            value_paid = data.get('valuePaid')
             routing_number = data.get('routingNumber')
-            bank_acct_number = data.get('bankAcctNumber')
-            memberID_insert = data.get('memberID')
-            financingID_insert = data.get('financingID')
+            bank_acc_number = data.get('bankAcctNumber')
+            VIN_carID = data.get('VIN_carID')
 
-            # Check if the member already has payment information
-            existing_payment = Payments.query.filter_by(memberID=member_id_request).first()
+            # checks if there is a service appointment for the given VIN_carID and memberID
+            # ensures also that the car belongs to the member without further checking
+            service_appointment = ServiceAppointment.query.filter_by(
+                VIN_carID=VIN_carID,
+                memberID=member_id,
+                status='Done'
+            ).first()
 
-            if existing_payment:
-                # Update existing payment information
-                existing_payment.paymentStatus = payment_status
-                existing_payment.valuePaid = value_paid
-                existing_payment.valueToPay = value_to_pay
-                existing_payment.initialPurchase = initial_purchase
-                existing_payment.lastPayment = last_payment
-                existing_payment.paymentType = payment_type
-                existing_payment.cardNumber = card_number
-                existing_payment.expirationDate = expiration_date
-                existing_payment.CVV = cvv
-                existing_payment.routingNumber = routing_number
-                existing_payment.bankAcctNumber = bank_acct_number
-                existing_payment.memberID = memberID_insert
-                existing_payment.financingID = financingID_insert
-            else:
-                # Create new payment information if there is no payment information
-                new_payment = Payments(paymentStatus=payment_status,
-                                       valuePaid=value_paid,
-                                       valueToPay=value_to_pay,
-                                       initialPurchase=initial_purchase,
-                                       lastPayment=last_payment,
-                                       paymentType=payment_type,
-                                       cardNumber=card_number,
-                                       expirationDate=expiration_date,
-                                       CVV=cvv,
-                                       routingNumber=routing_number,
-                                       bankAcctNumber=bank_acct_number,
-                                       memberID=memberID_insert,
-                                       financingID=financingID_insert
-                                       )
+            if not service_appointment:
+                return jsonify({
+                                   'message': 'No completed service appointment found for the provided VIN for payment to be made'}), 400
 
-                # commit changes into the DB
-                db.session.add(new_payment)
-                db.session.commit()
-            return jsonify({'message': 'Payment information updated successfully'}), 200
-        except Exception as e:
-            # Rollback the session in case of any exception
-            db.session.rollback()
-            return jsonify({'error': str(e)}), 500
+            # create a new payment record
+            new_payment = Payments(
+                paymentStatus='Completed',
+                valuePaid=value_paid,
+                valueToPay=0,
+                initialPurchase=datetime.now(),
+                lastPayment=datetime.now(),
+                paymentType='Check/Bank Account',
+                routingNumber=routing_number,
+                bankAcctNumber=bank_acc_number,
+                memberID=member_id,
+                financingID=11  # for all payments that do not involve financing
+            )
+            db.session.add(new_payment)
+
+            new_purchase = Purchases(
+                bidID=4,  # for all payments that do not involve bidding
+                VIN_carID=VIN_carID,
+                memberID=member_id,
+                confirmationNumber=confirmation_number_generation(),
+                purchaseType='Vehicle/Add-on Continuing Payment'
+            )
+            db.session.add(new_purchase)
+        else:
+            return jsonify({'message': 'Invalid purchase type'}), 400
+
+        db.session.commit()
+        return jsonify({'message': 'Payment information updated successfully'}), 200
+    except Exception as e:
+        # Rollback the session in case of any exception
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/vehicle-purchase/new-vehicle-no-finance', methods=['POST'])

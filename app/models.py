@@ -178,6 +178,7 @@ class Purchases(db.Model):
     VIN_carID = db.Column(db.String(17), ForeignKey('CarVINs.VIN_carID'))
     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
     confirmationNumber = db.Column(db.String(13), unique=True)
+    purchaseType = db.Column(Enum('Vehicle/Add-on Purchase', 'Vehicle/Add-on Continuing Payment', 'Service Payment'))
 
 
 class Addons(db.Model):
@@ -186,6 +187,7 @@ class Addons(db.Model):
     itemID = db.Column(db.Integer, primary_key=True, autoincrement=True)
     itemName = db.Column(db.String(100))
     totalCost = db.Column(db.DECIMAL(10, 2))
+
 
 # not important to use rn, will get these up and running at a later date
 # class MemberAuditLog(db.Model):
