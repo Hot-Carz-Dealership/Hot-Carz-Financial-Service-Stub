@@ -83,28 +83,37 @@ def member_vehicle_purchases():
     return jsonify(purchases_info), 200
 
 
-@app.route('/api/member/payments', methods=['GET'])
-# this endpoint is used to return the payment informations of the member who is authorized into the dealership and logged in
+@app.route('/api/member/payment-purchases-finance-bid-data', methods=['GET'])
+# this endpoint is used to return all data of members regarding payment, purchases, finance and bids informations of
+# the member who is authorized into the dealership and logged in and has a history here in the dealership
 def member_purchases():
     member_session_id = session.get('member_session_id')
     if member_session_id is None:
         return jsonify({'message': 'No session id provided'}), 404
 
-    payments_member = Payments.query.filter_by(
-        memberID=member_session_id).all()  # returns all payment information of the member
-    if not payments_member:
-        return jsonify({'message': 'No purchases found for this member'}), 404
+    # return payments, financing, bids, and purchase history for the member
+    payments = Payments.query.filter_by(memberID=member_session_id).all()
+    financing = Financing.query.filter_by(memberID=member_session_id).all()
+    bids = Bids.query.filter_by(memberID=member_session_id).all()
+    purchases = Purchases.query.filter_by(memberID=member_session_id).all()
 
-    # returns necessary purchase details
+    # for testing purposes
+    # payments = Payments.query.all()
+    # financing = Financing.query.all()
+    # bids = Bids.query.all()
+    # purchases = Purchases.query.all()
+
+
+    # Payment information
     payment_info = []
-    for payment in payments_member:
+    for payment in payments:
         payment_data = {
             'paymentID': payment.paymentID,
             'paymentStatus': payment.paymentStatus,
             'valuePaid': payment.valuePaid,
             'valueToPay': payment.valueToPay,
-            'initialPurchase': payment.initialPurchase,  # Convert to string
-            'lastPayment': payment.lastPayment,  # Convert to string
+            'initialPurchase': str(payment.initialPurchase),  # Convert to string
+            'lastPayment': str(payment.lastPayment),  # Convert to string
             'paymentType': payment.paymentType,
             'cardNumber': payment.cardNumber,
             'expirationDate': payment.expirationDate,
@@ -115,7 +124,56 @@ def member_purchases():
             'financingID': payment.financingID
         }
         payment_info.append(payment_data)
-    return jsonify(payment_info), 200
+
+    # Financing information
+    financing_data = []
+    for finance in financing:
+        financing_info = {
+            'financingID': finance.financingID,
+            'income': finance.income,
+            'credit_score': finance.credit_score,
+            'loan_total': finance.loan_total,
+            'down_payment': finance.down_payment,
+            'percentage': finance.percentage,
+            'monthly_sum': finance.monthly_sum,
+            'remaining_months': finance.remaining_months
+        }
+        financing_data.append(financing_info)
+
+    # Bid information
+    bid_info = []
+    for bid in bids:
+        bid_data = {
+            'bidID': bid.bidID,
+            'bidValue': bid.bidValue,
+            'bidStatus': bid.bidStatus,
+            'bidTimestamp': str(bid.bidTimestamp)  # Convert to string
+        }
+        bid_info.append(bid_data)
+
+    # Purchase history
+    purchase_history = []
+    for purchase in purchases:
+        purchase_data = {
+            'purchaseID': purchase.purchaseID,
+            'bidID': purchase.bidID,
+            'VIN_carID': purchase.VIN_carID,
+            'memberID': purchase.memberID,
+            'confirmationNumber': purchase.confirmationNumber,
+            'purchaseType': purchase.purchaseType,
+            'purchaseDate': str(purchase.purchaseDate)  # Convert to string
+        }
+        purchase_history.append(purchase_data)
+
+    # Construct the response
+    response_data = {
+        'payments': payment_info,
+        'financing': financing_data,
+        'bids': bid_info,
+        'purchase_history': purchase_history
+    }
+
+    return jsonify(response_data), 200
 
 
 @app.route('/api/current-bids', methods=['GET', 'POST'])
