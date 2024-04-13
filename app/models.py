@@ -179,6 +179,7 @@ class Purchases(db.Model):
     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
     confirmationNumber = db.Column(db.String(13), unique=True)
     purchaseType = db.Column(Enum('Vehicle/Add-on Purchase', 'Vehicle/Add-on Continuing Payment', 'Service Payment'))
+    purchaseDate = db.Column(db.TIMESTAMP)
 
 
 class Addons(db.Model):

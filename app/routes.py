@@ -6,7 +6,7 @@ import string
 from datetime import datetime
 
 from flask import jsonify, request, session
-from sqlalchemy import text, desc
+from sqlalchemy import text, desc, func
 
 from . import app
 from .models import *
@@ -237,7 +237,7 @@ def vehicle_purchase_bid_accepted():
         return jsonify({'error': 'Bid not found for the specified member and vehicle, could not purchase vehicle'}), 404
 
 
-@app.route('/api/manager/payment-report', methods=['GET'])
+@app.route('/api/manager/customer-payment-report', methods=['GET'])
 def payment_report():
     # GET protocol returns all payment information based on the passed memberID to be used as payment reports from
     # any specific customer
@@ -248,7 +248,7 @@ def payment_report():
             return jsonify({'message': 'Unauthorized access'}), 401
 
         # ensures that the employee is a Technician
-        employee = Employee.query.filter_by(employeeID=employee_id, employeeType='Technician').first()
+        employee = Employee.query.filter_by(employeeID=employee_id, employeeType='Manager').first()
         if not employee:
             return jsonify({'message': 'Unauthorized access'}), 401
 
@@ -278,6 +278,59 @@ def payment_report():
         return jsonify({'payments': payments_info}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/manager/monthly-sales-report', methods=['GET'])
+# this API generates monthly sales reports on all payments made in the dealership
+# Scufffedd but i think it works
+def monthly_sales_report():
+    # checks if a manager is logged in to view the information | uncomment when we have it working for sure 100% on frontend in implementation
+    # employee_id = session.get('employee_session_id')
+    # if not employee_id:
+    #     return jsonify({'message': 'Unauthorized access'}), 401
+    #
+    # ensures that the employee is a Technician
+    # employee = Employee.query.filter_by(employeeID=employee_id, employeeType='Manager').first()
+    # if not employee:
+    #     return jsonify({'message': 'Unauthorized access'}), 401
+
+    # request the parameters for monthly reports and in which year as well
+    # have these values return in some like tab like or drop down value from the manager dashboard view
+    month = request.args.get('month')  # have it be from 1-12
+    year = request.args.get('year')  # have it be in YYYY format
+
+    # use for value testing and debugging
+    # month = 2
+    # year = 23
+
+    # the only table that stores purchases is the 'Purchases' table.
+    # the finance, bids and purchases table only hold value but aren't needed for the total calculation
+    # of revenue bought into the dealership as they are not the tables used for when payment transactions made
+    # only for storing additional info on these transactions made
+    purchases = Purchases.query.filter(db.extract('month', Purchases.purchaseDate) == month,
+                                       db.extract('year', Purchases.purchaseDate) == year).all()
+
+    # Prepare sales report data
+    total_sales = 0
+    sales_report = []
+
+    # Calculate total sales from purchases
+    for purchase in purchases:
+        total_sales += purchase.bid.bidValue
+        sales_report.append({
+            'purchase_id': purchase.purchaseID,
+            'member_id': purchase.memberID,
+            'vehicle_id': purchase.VIN_carID,
+            'confirmation_number': purchase.confirmationNumber,
+            'purchase_type': purchase.purchaseType,
+            'purchase_timestamp': purchase.purchaseDate.isoformat(),
+            'bid_value': str(purchase.bid.bidValue)  # Convert Decimal to string for JSON serialization
+        })
+
+    return jsonify({
+        'total_sales': str(total_sales),  # Convert total sales to string for JSON serialization
+        'sales_report': sales_report
+    }), 200
 
 
 @app.route('/api/customer/make-payment', methods=['POST'])
@@ -348,7 +401,7 @@ def manage_payments():
 
             if not service_appointment:
                 return jsonify({
-                                   'message': 'No completed service appointment found for the provided VIN for payment to be made'}), 400
+                    'message': 'No completed service appointment found for the provided VIN for payment to be made'}), 400
 
             # create a new payment record
             new_payment = Payments(
