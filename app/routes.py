@@ -103,7 +103,6 @@ def member_purchases():
     # bids = Bids.query.all()
     # purchases = Purchases.query.all()
 
-
     # Payment information
     payment_info = []
     for payment in payments:
@@ -174,6 +173,56 @@ def member_purchases():
     }
 
     return jsonify(response_data), 200
+
+
+@app.route('/api/member-or-employee/finance-loan-payments', methods=['GET'])
+# this API provides a monthly payments view/report for requested loan
+# this can be used by both members and employee
+def member_finance_loan_payments():
+    member_id = session.get('member_session_id')
+    if not member_id:
+        employee_id = session.get('employee_session_id')
+        if not employee_id:
+            return jsonify({'message': 'Unauthorized login or access for member/manager'}), 401
+        employee = Employee.query.filter_by(employeeID=employee_id, employeeType='Manager').first()
+        if not employee:
+            return jsonify({'message': 'This login does not belong to a Manager'}), 401
+        data = request.json
+        member_id = data.get('memberID')
+    member = Member.query.filter_by(memberID=member_id).first()
+    if member is None:
+        return jsonify({'message': 'Unauthorized access'}), 401
+
+    # for debugging purposes
+    # member_id = 2
+
+    # join and filter the tables to fetch payments on the member's loan
+    payments = db.session.query(Payments) \
+        .join(Financing, Payments.financingID == Financing.financingID) \
+        .filter(Financing.memberID == member_id) \
+        .filter(Financing.financingID != 6) \
+        .all()
+
+    # format the data for json
+    payments_data = []
+    for payment in payments:
+        payments_data.append({
+            'paymentID': payment.paymentID,
+            'paymentStatus': payment.paymentStatus,
+            'valuePaid': payment.valuePaid,
+            'valueToPay': payment.valueToPay,
+            'initialPurchase': str(payment.initialPurchase),
+            'lastPayment': str(payment.lastPayment),
+            'paymentType': payment.paymentType,
+            'cardNumber': payment.cardNumber,
+            'expirationDate': payment.expirationDate,
+            'CVV': payment.CVV,
+            'routingNumber': payment.routingNumber,
+            'bankAcctNumber': payment.bankAcctNumber,
+            'memberID': payment.memberID,
+            'financingID': payment.financingID
+        })
+    return jsonify({'payments': payments_data}), 200
 
 
 @app.route('/api/current-bids', methods=['GET', 'POST'])
