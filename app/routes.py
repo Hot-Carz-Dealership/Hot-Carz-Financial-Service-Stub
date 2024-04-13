@@ -1,15 +1,13 @@
 # app/routes.py
 
-import random
 import re
+import random
 import string
-from datetime import datetime
-
-from flask import jsonify, request, session
-from sqlalchemy import text, desc, func
-
 from . import app
 from .models import *
+from datetime import datetime
+from sqlalchemy import text, desc, func
+from flask import jsonify, request, session
 
 ''' all the Financial Services APIs/ENDPOINTS are configured and exposed in this .py file '''
 
@@ -544,6 +542,34 @@ def manage_payments():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/member/check-ssn', methods=['POST'])
+# frontend: this api is made so before they put in their financial information, we ask the user for their SSN
+# but we need to check first if they have it in their info. use this before sending ssn value and redirecting to a page to do that
+# in order to not make more work for yourselves
+# this function is to be used before any '/api/vehicle-purchase/...' api's
+def check_ssn():
+    member_session_id = session.get('member_session_id')
+    if member_session_id is None:
+        return jsonify({'message': 'Need a member ID to check if they have an SSN in the DB.'}), 401
+    member_sensitive_info = MemberSensitiveInfo.query.filter_by(memberID=member_session_id).first()
+    if member_sensitive_info.SSN is None:
+        return False  # no SSN
+    else:
+        return True  # yes SSN stored
+
+
+@app.route('/api/member/update-ssn', methods=['POST'])
+def update_ssn(member_session_id):
+    data = request.json
+    ssn = data.get('ssn')
+    if regex_ssn(ssn):
+        return False
+    member_sensitive_info = MemberSensitiveInfo.query.filter_by(memberID=member_session_id).first()
+    member_sensitive_info.SSN = ssn
+    db.session.commit()
+    return True
+
+
 @app.route('/api/vehicle-purchase/new-vehicle-no-finance', methods=['POST'])
 # POST request is used by the customer to purchase a new Vehicle at BID or MSRP with NO FINANCING
 def purchase_vehicle():
@@ -556,55 +582,49 @@ def purchase_vehicle():
     # information from the frontend they have to pass to the backend is all below
     data = request.json
     vehicle_vin = data.get('vehicle_vin')
-    if vehicle_vin == -1:
+    if vehicle_vin is None:
         return jsonify({'message': "CAR DOESNT EXIST"}), 400
+
+    card_number = None
+    cvv = None
+    expiration_date = None
+
+    # member_sensitive_info = MemberSensitiveInfo.query.filter_by(memberID=member_session_id).first()
 
     payment_method = data.get('payment_method')
     payment_amount = data.get('payment_amount')
     member_id = data.get('member_id')
-    payment_option = data.get('payment_option')  # Payment option: 'Card' or 'Check'
+    payment_option = "Check"  # Payment option: "Check only now" because of new descope by professor
     vehicle_cost = return_vehicle_cost(vehicle_vin)
 
     if payment_method == 'MSRP':
-        if payment_option == 'Card':
-            card_number = data.get('card_number')
-            cvv = data.get('CVV')
-            expiration_date = data.get('expirationDate')
-            routing_number = None
-            account_number = None
+        routing_number = data.get('routing_number')
+        account_number = data.get('account_number')
 
-            regex_card_check(card_number, cvv, expiration_date)
+        if check_ssn() is False:
+            return_val = update_ssn(member_session_id)
+            if return_val is False:
+                return jsonify({'message': 'SSN number is in Invalid Format'}), 401
 
-            if payment_amount > 5000:
-                return jsonify({'message': 'Card payments are limited to $5000. The rest must be paid in person at '
-                                           'the dealership.'}), 400
+        if regex_bank_acct_check(routing_number, account_number) is False:
+            return jsonify({'message': 'Routing Number and Account Number are Invalid Formats'}), 401
 
-            return msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option,
-                                                      card_number, cvv,
-                                                      expiration_date, vehicle_cost, routing_number,
-                                                      account_number)
+        # add a Cart endpoint here before we finish the purchase
 
-        elif payment_option == 'Check':
-            routing_number = data.get('routing_number')
-            account_number = data.get('account_number')
-            card_number = None
-            cvv = None
-            expiration_date = None
-
-            regex_bank_acct_check(routing_number, account_number)
-
-            return msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option,
-                                                      card_number, cvv,
-                                                      expiration_date, vehicle_cost, routing_number,
-                                                      account_number)
-
-        else:
-            return jsonify({'message': 'Invalid payment option for MSRP.'}), 400
+        return msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option,
+                                                  card_number, cvv,
+                                                  expiration_date, vehicle_cost, routing_number,
+                                                  account_number)
     else:
         # BIDDING and not purchasing right then and there.
         bid_value = data.get('bidValue')
         bid_status = 'Processing'  # not sent from the frontend. The change to Confirmed/Denied
         return bid_insert_no_financing(member_id, bid_value, bid_status)
+
+
+@app.route('/api/vehicle-purchase/cart', methods=['POST'])
+def purchase_cart():
+    ...
 
 
 def regex_card_check(card_number: str, cvv: str, expiration_date: str) -> bool:
@@ -623,13 +643,21 @@ def regex_card_check(card_number: str, cvv: str, expiration_date: str) -> bool:
 
 
 def regex_bank_acct_check(routing_number: str, account_number: str) -> bool:
-    # regec validation for the routing number and account number to be correct
+    # regex validation for the routing number and account number to be correct
     routing_regex = re.compile(r'^[0-9]{9}$')
     account_regex = re.compile(r'^[0-9]{9,12}$')  # Bank account numbers vary from 9 to 12 char length
 
     if not routing_regex.match(routing_number):
         return False
     if not account_regex.match(account_number):
+        return False
+    return True
+
+
+def regex_ssn(ssn: str) -> bool:
+    # regex validation for SSN values
+    ssn_regex = re.compile(r'(?!000|666|9\d{2})\d{3}(?!00)\d{2}(?!0000)\d{4}$')
+    if not ssn_regex.match(ssn):
         return False
     return True
 
@@ -647,10 +675,12 @@ def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, p
     try:
         # Insert purchase information into the database
 
-        # dont worry about signature this round ######
-        # signature_val = get_signature()  # don't worry about this rn i have to fix the DB and tables for this
-        # if signature_val != 'YES' or signature_val != 'NO':
-        #     return signature_val  # returns an error back to the frontend
+        # don't worry about signature this round ######
+        signature_val = get_signature()
+        if signature_val != 'Yes' or signature_val != 'No':
+            return signature_val  # returns an error back to the frontend
+        elif signature_val == 'No':
+            return jsonify({'message': 'You must provide a signature to purchase a vehicle.'}), 401
 
         valuePaid_value = payment_amount
         valueToPay_value = vehicle_cost - payment_amount
@@ -681,7 +711,9 @@ def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, p
             VIN_carID=vehicle_vin,
             memberID=member_id,
             confirmationNumber=confirmation_number_generation(),  # You may generate a confirmation number here
-            # signature=signature_val
+            purchaseType='Vehicle/Add-on Purchase',
+            purchaseDate=datetime.now(),
+            signature=signature_val
         )
 
         db.session.add(new_purchase)
@@ -924,16 +956,16 @@ def new_vehicle_purchase_finance():
 
 
 # not in use yet
-# @app.route('/api/vehicle-purchase/signature', methods=['POST'])
-# def get_signature():
-#     data = request.json
-#     signature = int(data.get('signature'))  # yes = 1, no = 0
-#     if signature == 0:
-#         return 'NO'
-#     elif signature == 1:
-#         return 'YES'
-#     else:
-#         return jsonify({'message': 'Invalid VALUE'}), 400
+@app.route('/api/vehicle-purchase/signature', methods=['POST'])
+def get_signature():
+    data = request.json
+    signature = int(data.get('signature'))  # yes = 1, no = 0
+    if signature == 0:
+        return 'No'
+    elif signature == 1:
+        return 'Yes'
+    else:
+        return jsonify({'message': 'Invalid VALUE'}), 400
 
 
 @app.route('/api/vehicle-purchase/bid-confirmed-financed-purchase', methods=['POST'])
