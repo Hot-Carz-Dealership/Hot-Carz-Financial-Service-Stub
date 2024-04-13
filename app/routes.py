@@ -62,7 +62,7 @@ def member_vehicle_purchases():
     # Extract necessary purchase details
     purchases_info = []
     for purchase in vehicle_purchases_member:
-        car_info = Cars.query.filter_by(VIN_carID=purchase.VIN_carID).first()
+        car_info = CarInfo.query.filter_by(VIN_carID=purchase.VIN_carID).first()
         bid_info = Bids.query.filter_by(bidID=purchase.bidID).first()
 
         # Access payment type directly from purchase object
@@ -125,7 +125,7 @@ def current_bids():
         for bid in bids:
             purchase = Purchases.query.filter_by(bidID=bid.bidID).first()
             if purchase:
-                car = Cars.query.filter_by(VIN_carID=purchase.VIN_carID).first()
+                car = CarInfo.query.filter_by(VIN_carID=purchase.VIN_carID).first()
                 if car:
                     bid_info = {
                         'make': car.make,
@@ -175,7 +175,7 @@ def vehicle_purchase_bid_accepted():
             return jsonify({'message': 'Bid not found or is Not Confirmed, Cannot continue with Purchase'}), 404
 
         # returns vehicle information for purchase for the vehicle to be bought
-        vehicle = Cars.query.filter_by(VIN_carID=bid.VIN_carID).first()
+        vehicle = CarInfo.query.filter_by(VIN_carID=bid.VIN_carID).first()
         if not vehicle:
             return jsonify({'message': 'Vehicle not found for this bid'}), 404
 
@@ -506,7 +506,7 @@ def bid_insert_no_financing(member_id, bid_value, bid_status):
 
 def return_vehicle_cost(vehicle_vin):
     # we return the cost of the vehicle here based on the vehicle_vin passed into the function
-    vehicle = Cars.query.filter_by(VIN_carID=vehicle_vin).first()
+    vehicle = CarInfo.query.filter_by(VIN_carID=vehicle_vin).first()
     if not vehicle:
         return -1
     return vehicle.price
@@ -750,7 +750,7 @@ def new_bid_purchase_finance():
             return jsonify({'message': 'Bid not found or is Not Confirmed, Cannot continue with Purchase'}), 404
 
         # return purchasing information on the vehicle to be purchased, we need the information not COST since we are buying based on an approved BID
-        vehicle = Cars.query.filter_by(VIN_carID=bid.VIN_carID).first()
+        vehicle = CarInfo.query.filter_by(VIN_carID=bid.VIN_carID).first()
         if not vehicle:
             return jsonify({'message': 'Vehicle not found for this bid'}), 404
 

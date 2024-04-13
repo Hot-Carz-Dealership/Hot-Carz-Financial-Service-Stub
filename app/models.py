@@ -7,10 +7,18 @@ from sqlalchemy import Enum, ForeignKey
 # Defined SQLAlchemy models to represent database tables
 
 
-class Cars(db.Model):
+class CarVINs(db.Model):
+    __tablename__ = 'CarVINs'
+    itemID = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    VIN_carID = db.Column(db.String(17), unique=True)
+    purchase_status = db.Column(Enum('Dealership', 'Outside Dealership'))
+
+
+class CarInfo(db.Model):
     # cars table model
-    __tablename__ = 'Cars'
-    VIN_carID = db.Column(db.String(17), primary_key=True)
+    __tablename__ = 'CarInfo'
+    itemID = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    VIN_carID = db.Column(db.String(17), ForeignKey('CarVINs.itemID'))
     make = db.Column(db.String(50))
     model = db.Column(db.String(50))
     body = db.Column(db.String(50))
@@ -47,7 +55,7 @@ class TestDrive(db.Model):
     __tablename__ = 'TestDrive'
     testdrive_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
-    VIN_carID = db.Column(db.String(17), ForeignKey('Cars.VIN_carID'))
+    VIN_carID = db.Column(db.String(17), ForeignKey(' CarVINs.VIN_carID'))
     appointment_date = db.Column(db.TIMESTAMP)
     confirmation = db.Column(Enum('Confirmed', 'Denied', 'Cancelled', 'Awaiting Confirmation'))
 
@@ -64,10 +72,12 @@ class ServiceAppointment(db.Model):
     appointment_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
     serviceID = db.Column(db.Integer, ForeignKey('Services.serviceID'))
+    VIN_carID = db.Column(db.String(17), ForeignKey('CarVINs.VIN_carID'))  # new for service Appointments
     appointment_date = db.Column(db.DATE)
     comments = db.Column(db.TEXT)
     status = db.Column(Enum('Scheduled', 'Done'))
-    last_modified = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+    last_modified = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(),
+                              onupdate=db.func.current_timestamp())
 
 
 class ServiceAppointmentEmployeeAssignments(db.Model):
@@ -165,7 +175,7 @@ class Purchases(db.Model):
     __tablename__ = 'Purchases'
     purchaseID = db.Column(db.Integer, primary_key=True, autoincrement=True)
     bidID = db.Column(db.Integer, ForeignKey('Bids.bidID'))
-    VIN_carID = db.Column(db.String(17), ForeignKey('Cars.VIN_carID'))
+    VIN_carID = db.Column(db.String(17), ForeignKey('CarVINs.VIN_carID'))
     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
     confirmationNumber = db.Column(db.String(13), unique=True)
 
