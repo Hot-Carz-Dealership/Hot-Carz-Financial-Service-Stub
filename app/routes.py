@@ -235,6 +235,49 @@ def vehicle_purchase_bid_accepted():
         return jsonify({'error': 'Bid not found for the specified member and vehicle, could not purchase vehicle'}), 404
 
 
+@app.route('/api/manager/payment-report', methods=['GET'])
+def payment_report():
+    # GET protocol returns all payment information based on the passed memberID to be used as payment reports from
+    # any specific customer
+    try:
+        # checks if a manager is logged in to view the information
+        employee_id = session.get('employee_session_id')
+        if not employee_id:
+            return jsonify({'message': 'Unauthorized access'}), 401
+
+        # ensures that the employee is a Technician
+        employee = Employee.query.filter_by(employeeID=employee_id, employeeType='Technician').first()
+        if not employee:
+            return jsonify({'message': 'Unauthorized access'}), 401
+
+        data = request.json
+        member_id = data.get('memberID')
+        # payments = Payments.query.all() # for debugging
+        payments = Payments.query.filter_by(memberID=member_id).all()
+        payments_info = []
+        for payment in payments:
+            payment_data = {
+                'paymentID': payment.paymentID,
+                'paymentStatus': payment.paymentStatus,
+                'valuePaid': payment.valuePaid,
+                'valueToPay': payment.valueToPay,
+                'initialPurchase': payment.initialPurchase,  # Convert to string
+                'lastPayment': payment.lastPayment,  # Convert to string
+                'paymentType': payment.paymentType,
+                'cardNumber': payment.cardNumber,
+                'expirationDate': payment.expirationDate,
+                'CVV': payment.CVV,
+                'routingNumber': payment.routingNumber,
+                'bankAcctNumber': payment.bankAcctNumber,
+                'memberID': payment.memberID,
+                'financingID': payment.memberID
+            }
+            payments_info.append(payment_data)
+        return jsonify({'payments': payments_info}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/payments', methods=['GET', 'POST'])
 def manage_payments():
     # GET protocol returns all payement information based on the passed memberID
