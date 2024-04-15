@@ -609,6 +609,7 @@ def purchase_vehicle():
         if regex_bank_acct_check(routing_number, account_number) is False:
             return jsonify({'message': 'Routing Number and Account Number are Invalid Formats'}), 401
 
+        # --- left of here cart stuff ---
         # add a Cart endpoint here before we finish the purchase
 
         return msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option,
@@ -622,7 +623,10 @@ def purchase_vehicle():
         return bid_insert_no_financing(member_id, bid_value, bid_status)
 
 
+# --- left off here ---
 @app.route('/api/vehicle-purchase/cart', methods=['POST'])
+# i have no clue how to implement this, i was thinking about this one being implemented based on indiv. sessions
+# and not needing another DB table for member carts
 def purchase_cart():
     ...
 
