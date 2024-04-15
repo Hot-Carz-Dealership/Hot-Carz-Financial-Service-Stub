@@ -389,7 +389,7 @@ def payment_report():
 # this API generates monthly sales reports on all payments made in the dealership
 # Scufffedd but i think it works
 def monthly_sales_report():
-    # checks if a manager is logged in to view the information | uncomment when we have it working for sure 100% on frontend in implementation
+    # checks if a manager is logged in to view the information | uncomment when we have it working for sure 100% on frontend in implementation | commented manager session out for testing and ensuring it works
     # employee_id = session.get('employee_session_id')
     # if not employee_id:
     #     return jsonify({'message': 'Unauthorized access'}), 401
