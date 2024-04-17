@@ -165,6 +165,7 @@ class Bids(db.Model):
     __tablename__ = 'Bids'
     bidID = db.Column(db.Integer, primary_key=True, autoincrement=True)
     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
+    VIN_carID = db.Column(db.String(17), ForeignKey('CarVINs.VIN_carID')) #Bids Should be attached to some vehicle
     bidValue = db.Column(db.DECIMAL(10, 2))
     bidStatus = db.Column(Enum('Confirmed', 'Denied', 'Processing', 'None'))
     bidTimestamp = db.Column(db.TIMESTAMP)
