@@ -87,7 +87,7 @@ def member_vehicle_purchases():
 def member_purchases():
     member_session_id = session.get('member_session_id')
     if member_session_id is None:
-        return jsonify({'message': 'No session id provided'}), 404
+        return jsonify({'message': 'No session id provided'}), 400
 
     # return payments, financing, bids, and purchase history for the member
     payments = Payments.query.filter_by(memberID=member_session_id).all()
@@ -143,6 +143,7 @@ def member_purchases():
         bid_data = {
             'bidID': bid.bidID,
             'bidValue': bid.bidValue,
+            'Vin_carID': bid.VIN_carID,
             'bidStatus': bid.bidStatus,
             'bidTimestamp': str(bid.bidTimestamp)  # Convert to string
         }
