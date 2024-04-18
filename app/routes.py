@@ -50,7 +50,11 @@ def all_purchases():
 @app.route('/api/member/vehicle-purchases', methods=['GET'])
 # this endpoint is used to return all vehicle purchase information for an authorized customer to view their past vehicle purchases
 def member_vehicle_purchases():
-    member_session_id = session.get('member_session_id')  # sessions with Auth for a member who has bought a customer
+    
+    #   member_session_id = session.get('member_session_id')  # sessions with Auth for a member who has bought a customer
+    # TODO: Temp solution
+    member_session_id = request.args.get('memberID')
+
     if member_session_id is None:
         return jsonify({'message': 'No session id provided'}), 404
 
@@ -66,14 +70,14 @@ def member_vehicle_purchases():
         bid_info = Bids.query.filter_by(bidID=purchase.bidID).first()
 
         # Access payment type directly from purchase object
-        payment_type = purchase.payment.paymentType
+        # payment_type = purchase.payment.paymentType
 
         purchases_info.append({
             'purchaseID': purchase.purchaseID,
             'car_make': car_info.make,
             'car_model': car_info.model,
             'car_year': car_info.year,
-            'payment_type': payment_type,
+            # 'payment_type': payment_type,
             'bid_value': bid_info.bidValue,
             'bid_status': bid_info.bidStatus,
             'confirmation_number': purchase.confirmationNumber
