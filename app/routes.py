@@ -9,6 +9,7 @@ from .models import *
 from datetime import datetime
 from sqlalchemy import text, desc, func
 from flask import jsonify, request, session
+from sqlalchemy.exc import IntegrityError
 
 ''' all the Financial Services APIs/ENDPOINTS are configured and exposed in this .py file '''
 
@@ -729,54 +730,50 @@ def update_ssn(member_session_id):
 @app.route('/api/vehicle-purchase/new-vehicle-no-finance', methods=['POST'])
 # POST request is used by the customer to purchase a new Vehicle at BID or MSRP with NO FINANCING
 def purchase_vehicle():
-    # ensure that the member is logged in and has an account
-    member_session_id = session.get('member_session_id')
-    if member_session_id is None:
-        # redirect the user at this point to a login screen if they are not logged in to an account to purchase a vehicle
-        return jsonify({'message': 'You need to log in to purchase a vehicle.'}), 401
+    member_id = session.get('member_session_id')
+    if member_id is None:
+        return jsonify({'message': 'You need to log in to purchase a vehicle.'}), 403
 
-    # information from the frontend they have to pass to the backend is all below
     data = request.json
     vehicle_vin = data.get('vehicle_vin')
     if vehicle_vin is None:
-        return jsonify({'message': "CAR DOESNT EXIST"}), 400
+        return jsonify({'message': "Vehicle VIN is missing."}), 400
 
-    card_number = None
-    cvv = None
-    expiration_date = None
-
-    # member_sensitive_info = MemberSensitiveInfo.query.filter_by(memberID=member_session_id).first()
+    # card_number = None
+    # cvv = None
+    # expiration_date = None
 
     payment_method = data.get('payment_method')
     payment_amount = data.get('payment_amount')
-    member_id = data.get('member_id')
-    payment_option = "Check"  # Payment option: "Check only now" because of new descope by professor
-    vehicle_cost = return_vehicle_cost(vehicle_vin)
+    payment_option = "Check"
 
+    try:
+        vehicle_cost = return_vehicle_cost(vehicle_vin)
+    except ValueError as ve:
+        return jsonify({'error': str(ve)}), 404  # Vehicle not found
+    
     if payment_method == 'MSRP':
         routing_number = data.get('routing_number')
         account_number = data.get('account_number')
 
         if check_ssn() is False:
-            return_val = update_ssn(member_session_id)
-            if return_val is False:
-                return jsonify({'message': 'SSN number is in Invalid Format'}), 401
+            return jsonify({'message': 'SSN number is in Invalid Format.'}), 401
 
         if regex_bank_acct_check(routing_number, account_number) is False:
-            return jsonify({'message': 'Routing Number and Account Number are Invalid Formats'}), 401
+            return jsonify({'message': 'Routing Number and/or Account Number are in Invalid Formats.'}), 401
 
-        # --- left of here cart stuff ---
-        # add a Cart endpoint here before we finish the purchase
+        try:
+            return msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option, vehicle_cost, routing_number, account_number)
+        except Exception as e:
+            return jsonify({'error': f'Error processing MSRP payment: {str(e)}'}), 500
 
-        return msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option,
-                                                  card_number, cvv,
-                                                  expiration_date, vehicle_cost, routing_number,
-                                                  account_number)
     else:
-        # BIDDING and not purchasing right then and there.
         bid_value = data.get('bidValue')
-        bid_status = 'Processing'  # not sent from the frontend. The change to Confirmed/Denied
-        return bid_insert_no_financing(member_id, bid_value, bid_status)
+        bid_status = 'Processing'
+        try:
+            return bid_insert_no_financing(member_id, bid_value, bid_status)
+        except Exception as e:
+            return jsonify({'error': f'Error processing bid: {str(e)}'}), 500
 
 
 # --- left off here ---
@@ -822,66 +819,65 @@ def regex_ssn(ssn: str) -> bool:
     return True
 
 
-def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option,
-                                       card_number, cvv,
-                                       expiration_date, vehicle_cost, routing_number,
-                                       account_number):
-    # payment_option = check, card
-    # payment_method = MSRP, BID
-    # here we only deal with Purchases and Payments table
-    # we insert these values into the table
-    # we do grab a signature and store but that will be later in development
-
+def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option, vehicle_cost, routing_number, account_number):
     try:
-        # Insert purchase information into the database
-
-        # don't worry about signature this round ######
+        # Validate signature
         signature_val = get_signature()
-        if signature_val != 'Yes' or signature_val != 'No':
-            return signature_val  # returns an error back to the frontend
+        if signature_val not in ['Yes', 'No']:
+            return jsonify({'error': 'Invalid signature value.'}), 400
         elif signature_val == 'No':
-            return jsonify({'message': 'You must provide a signature to purchase a vehicle.'}), 401
+            return jsonify({'error': 'You must provide a signature to purchase a vehicle.'}), 401
 
+        # Calculate payment values
         valuePaid_value = payment_amount
         valueToPay_value = vehicle_cost - payment_amount
 
-        # no need to add into financing
-
+        # Add payment record
         new_payment = Payments(
             paymentStatus='Confirmed',
             valuePaid=valuePaid_value,
             valueToPay=valueToPay_value,
             initialPurchase=datetime.now(),
             lastPayment=datetime.now(),
-            paymentType=payment_option,  # payment_option = check, card
+            paymentType=payment_option,
             servicePurchased='Vehicle Purchase',
-            cardNumber=card_number,
-            expirationDate=expiration_date,
-            CVV=cvv,
+            # cardNumber=card_number,
+            # expirationDate=expiration_date,
+            # CVV=cvv,
             routingNumber=routing_number,
             bankAcctNumber=account_number,
             memberID=member_id,
             financingID=None
         )
-
         db.session.add(new_payment)
+
+        # Commit payment record
         db.session.commit()
 
+        # Add purchase record
         new_purchase = Purchases(
             VIN_carID=vehicle_vin,
             memberID=member_id,
-            confirmationNumber=confirmation_number_generation(),  # You may generate a confirmation number here
-            purchaseType='Vehicle/Add-on Purchase',
-            purchaseDate=datetime.now(),
-            signature=signature_val
+            confirmationNumber=confirmation_number_generation(),
+            # purchaseType='Vehicle/Add-on Purchase',
+            # purchaseDate=datetime.now(),
+            # signature=signature_val
         )
-
         db.session.add(new_purchase)
+
+        # Commit purchase record
         db.session.commit()
+
         return jsonify({'message': 'Vehicle purchase processed successfully.'}), 200
+
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Integrity error occurred. Please check your input data.'}), 400
+
     except Exception as e:
         db.session.rollback()
-        return jsonify({'message': f'Error: {str(e)}'}), 500
+        return jsonify({'error': f'Error processing vehicle purchase: {str(e)}'}), 500
+
 
 
 @app.route('/api/vehicle-purchase/new-bid-insert', methods=['POST'])
@@ -907,11 +903,18 @@ def bid_insert_no_financing(member_id, bid_value, bid_status):
 
 
 def return_vehicle_cost(vehicle_vin):
-    # we return the cost of the vehicle here based on the vehicle_vin passed into the function
+    # Validate vehicle VIN
+    # if not is_valid_vin(vehicle_vin):
+    #     raise ValueError("Invalid VIN format.")
+
+    # Retrieve vehicle price from the database
     vehicle = CarInfo.query.filter_by(VIN_carID=vehicle_vin).first()
+    
     if not vehicle:
-        return -1
+        raise ValueError("Vehicle with VIN {} not found.".format(vehicle_vin))
+
     return vehicle.price
+
 
 
 def charCompany(cardNumber: str) -> str:
@@ -929,9 +932,13 @@ def charCompany(cardNumber: str) -> str:
 
 
 def confirmation_number_generation() -> str:
-    # this function generates the confirmation number randomely
-    total_chars = string.ascii_uppercase + string.digits
-    return ''.join(random.choice(total_chars) for i in range(13))
+    try:
+        total_chars = string.ascii_uppercase + string.digits
+        return ''.join(random.choice(total_chars) for i in range(13))
+    except Exception as e:
+        # Log the exception or handle it appropriately
+        print(f"Error generating confirmation number: {e}")
+        return None
 
 
 def creditScoreGenerator() -> int:
