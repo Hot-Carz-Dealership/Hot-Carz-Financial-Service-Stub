@@ -3,11 +3,13 @@
 import re
 import random
 import string
+import bcrypt
 from . import app
 from .models import *
 from datetime import datetime
 from sqlalchemy import text, desc, func
 from flask import jsonify, request, session
+from sqlalchemy.exc import IntegrityError
 
 ''' all the Financial Services APIs/ENDPOINTS are configured and exposed in this .py file '''
 
@@ -25,6 +27,157 @@ def testdb():
         error_text = "<p>The error:<br>" + str(e) + "</p>"
         hed = '<h1>Something is broken.</h1>'
         return hed + error_text
+
+### I couldn't figure out how to transfer the session id over so for now this works for testing at least
+### I'll just have the login frontend also make a request to this until i figure out some better solution
+
+@app.route("/@me")
+# Gets user for active session for Members
+def get_current_user():
+    user_id = session.get("member_session_id")
+
+    # if it is none, basically we then begin the login for employees and NOT members here.
+    # all in one endpoint, thx patrick. This data belongs to him but it's under my commit because I fucked up.
+    if not user_id:
+        user_id = session.get("employee_session_id")
+
+        if not user_id:
+            return jsonify({"error": "Unauthorized"}), 401
+        employee = Employee.query.filter_by(employeeID=user_id).first()
+        return jsonify({
+            'employeeID': employee.employeeID,
+            'first_name': employee.first_name,
+            'last_name': employee.last_name,
+            'email': employee.email,
+            'phone': employee.phone,
+            'address': employee.address,
+            'employeeType': employee.employeeType,
+        }), 200
+
+    member = Member.query.filter_by(memberID=user_id).first()
+    sensitive_info = MemberSensitiveInfo.query.filter_by(memberID=user_id).first()  # for returning their Driver ID
+    return jsonify({
+        'memberID': member.memberID,
+        'first_name': member.first_name,
+        'last_name': member.last_name,
+        'email': member.email,
+        'phone': member.phone,
+        'address': member.address,
+        'state': member.state,
+        'zipcode': member.zipcode,
+        'driverID': sensitive_info.driverID,
+        'join_date': member.join_date
+        # in the future will add Address, Zipcode and State on where the member is from
+    }), 200
+
+
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    # THE FRONTEND NEEDS TO REDIRECT WHEN U CALL THIS ENDPOINT BACK TO THE LOGIN SCREEN ON that END.
+    # LMK if IT WORKS OR NOT
+    session.clear()
+    return jsonify({'message': 'Logged out successfully'}), 200
+
+
+# Route for user authentication
+@app.route('/api/login', methods=['POST'])
+def login():
+    re_string = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    try:
+        data = request.json
+        username = data.get('username')
+
+        # the basis on this check is to better ensure who we are checking for when logging in
+        # Emails = employees
+        # regular Text = members
+        if re.search(re_string, username) is None:
+            # username is not an email, we check for member logging in
+
+            # checks if the provided data belongs to a member
+            # 'username' parameter is used interchangeably with email for employee and username for member
+            password = data.get('password').encode('utf-8')
+
+            # if none, then there is no username associated with the account
+            member_match_username = db.session.query(MemberSensitiveInfo).filter(
+                MemberSensitiveInfo.username == username).first()
+
+            if member_match_username is None:
+                return jsonify({'error': 'Invalid username or password.'}), 401
+
+            stored_hash = member_match_username.password.encode('utf-8')
+
+            # Check if password matches
+            if bcrypt.checkpw(password, stored_hash):
+                member_info = db.session.query(Member, MemberSensitiveInfo). \
+                    join(MemberSensitiveInfo, Member.memberID == MemberSensitiveInfo.memberID). \
+                    filter(MemberSensitiveInfo.username == username).first()
+
+                if member_info:
+                    member, sensitive_info = member_info
+                    session['member_session_id'] = member.memberID
+
+                    # just in case because the member create doesn't force them to enter a SSN, so if nothign returns from the DB,
+                    # better to have a text to show on the frontend then just nothing.
+                    return jsonify({
+                        'type': 'member',
+                        'memberID': member.memberID,
+                        'first_name': member.first_name,
+                        'last_name': member.last_name,
+                        'email': member.email,
+                        'phone': member.phone,
+                        'address': member.address,
+                        'state': member.state,
+                        'zipcode': member.zipcode,
+                        'join_date': member.join_date,
+                        'SSN': sensitive_info.SSN,
+                        'driverID': sensitive_info.driverID,
+                        'cardInfo': sensitive_info.cardInfo
+                    }), 200
+            else:
+                return jsonify({'error': 'Invalid username or password.'}), 401
+        else:
+            # the username is an email, we check for employee logging in
+
+            email = username
+            password = data.get('password').encode('utf-8')
+
+            # if none, then there is no username associated with the account
+            sensitive_info_username_match = db.session.query(EmployeeSensitiveInfo). \
+                join(Employee, Employee.employeeID == EmployeeSensitiveInfo.employeeID). \
+                filter(Employee.email == email).first()
+
+            if sensitive_info_username_match is None:
+                return jsonify({'error': 'Invalid username or password.'}), 401
+
+            stored_hash = sensitive_info_username_match.password.encode('utf-8')
+            # Check if password matches
+            if bcrypt.checkpw(password, stored_hash):
+                employee_data = db.session.query(Employee, EmployeeSensitiveInfo). \
+                    join(EmployeeSensitiveInfo, Employee.employeeID == EmployeeSensitiveInfo.employeeID). \
+                    filter(Employee.email == email).first()
+
+                if employee_data:
+                    employee, sensitive_info = employee_data
+                    session['employee_session_id'] = employee.employeeID
+                    response = {
+                        'employeeID': employee.employeeID,
+                        'first_name': employee.first_name,
+                        'last_name': employee.last_name,
+                        'email': employee.email,
+                        'phone': employee.phone,
+                        'address': employee.address,
+                        'employeeType': employee.employeeType,
+                    }
+                    return jsonify(response), 200
+            else:
+                return jsonify({'error': 'Invalid username or password.'}), 401
+
+        # If neither member nor employee, return error
+        return jsonify({'error': 'Invalid credentials or user type'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 
 @app.route('/api/purchases', methods=['GET'])
@@ -46,11 +199,14 @@ def all_purchases():
 
     return jsonify({'purchases': purchases_list}), 200
 
-
+# TODO : Need to fix the api to handle crashes missing data or fix up the db
+# Get to it after vehicle purchases are actually going thru succesfully
 @app.route('/api/member/vehicle-purchases', methods=['GET'])
 # this endpoint is used to return all vehicle purchase information for an authorized customer to view their past vehicle purchases
 def member_vehicle_purchases():
+    
     member_session_id = session.get('member_session_id')  # sessions with Auth for a member who has bought a customer
+
     if member_session_id is None:
         return jsonify({'message': 'No session id provided'}), 404
 
@@ -66,14 +222,14 @@ def member_vehicle_purchases():
         bid_info = Bids.query.filter_by(bidID=purchase.bidID).first()
 
         # Access payment type directly from purchase object
-        payment_type = purchase.payment.paymentType
+        # payment_type = purchase.payment.paymentType
 
         purchases_info.append({
             'purchaseID': purchase.purchaseID,
             'car_make': car_info.make,
             'car_model': car_info.model,
             'car_year': car_info.year,
-            'payment_type': payment_type,
+            # 'payment_type': payment_type,
             'bid_value': bid_info.bidValue,
             'bid_status': bid_info.bidStatus,
             'confirmation_number': purchase.confirmationNumber
@@ -87,7 +243,7 @@ def member_vehicle_purchases():
 def member_purchases():
     member_session_id = session.get('member_session_id')
     if member_session_id is None:
-        return jsonify({'message': 'No session id provided'}), 404
+        return jsonify({'message': 'No session id provided'}), 400
 
     # return payments, financing, bids, and purchase history for the member
     payments = Payments.query.filter_by(memberID=member_session_id).all()
@@ -143,6 +299,7 @@ def member_purchases():
         bid_data = {
             'bidID': bid.bidID,
             'bidValue': bid.bidValue,
+            'Vin_carID': bid.VIN_carID,
             'bidStatus': bid.bidStatus,
             'bidTimestamp': str(bid.bidTimestamp)  # Convert to string
         }
@@ -573,54 +730,50 @@ def update_ssn(member_session_id):
 @app.route('/api/vehicle-purchase/new-vehicle-no-finance', methods=['POST'])
 # POST request is used by the customer to purchase a new Vehicle at BID or MSRP with NO FINANCING
 def purchase_vehicle():
-    # ensure that the member is logged in and has an account
-    member_session_id = session.get('member_session_id')
-    if member_session_id is None:
-        # redirect the user at this point to a login screen if they are not logged in to an account to purchase a vehicle
-        return jsonify({'message': 'You need to log in to purchase a vehicle.'}), 401
+    member_id = session.get('member_session_id')
+    if member_id is None:
+        return jsonify({'message': 'You need to log in to purchase a vehicle.'}), 403
 
-    # information from the frontend they have to pass to the backend is all below
     data = request.json
     vehicle_vin = data.get('vehicle_vin')
     if vehicle_vin is None:
-        return jsonify({'message': "CAR DOESNT EXIST"}), 400
+        return jsonify({'message': "Vehicle VIN is missing."}), 400
 
-    card_number = None
-    cvv = None
-    expiration_date = None
-
-    # member_sensitive_info = MemberSensitiveInfo.query.filter_by(memberID=member_session_id).first()
+    # card_number = None
+    # cvv = None
+    # expiration_date = None
 
     payment_method = data.get('payment_method')
     payment_amount = data.get('payment_amount')
-    member_id = data.get('member_id')
-    payment_option = "Check"  # Payment option: "Check only now" because of new descope by professor
-    vehicle_cost = return_vehicle_cost(vehicle_vin)
+    payment_option = "Check"
 
+    try:
+        vehicle_cost = return_vehicle_cost(vehicle_vin)
+    except ValueError as ve:
+        return jsonify({'error': str(ve)}), 404  # Vehicle not found
+    
     if payment_method == 'MSRP':
         routing_number = data.get('routing_number')
         account_number = data.get('account_number')
 
         if check_ssn() is False:
-            return_val = update_ssn(member_session_id)
-            if return_val is False:
-                return jsonify({'message': 'SSN number is in Invalid Format'}), 401
+            return jsonify({'message': 'SSN number is in Invalid Format.'}), 401
 
         if regex_bank_acct_check(routing_number, account_number) is False:
-            return jsonify({'message': 'Routing Number and Account Number are Invalid Formats'}), 401
+            return jsonify({'message': 'Routing Number and/or Account Number are in Invalid Formats.'}), 401
 
-        # --- left of here cart stuff ---
-        # add a Cart endpoint here before we finish the purchase
+        try:
+            return msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option, vehicle_cost, routing_number, account_number)
+        except Exception as e:
+            return jsonify({'error': f'Error processing MSRP payment: {str(e)}'}), 500
 
-        return msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option,
-                                                  card_number, cvv,
-                                                  expiration_date, vehicle_cost, routing_number,
-                                                  account_number)
     else:
-        # BIDDING and not purchasing right then and there.
         bid_value = data.get('bidValue')
-        bid_status = 'Processing'  # not sent from the frontend. The change to Confirmed/Denied
-        return bid_insert_no_financing(member_id, bid_value, bid_status)
+        bid_status = 'Processing'
+        try:
+            return bid_insert_no_financing(member_id, bid_value, bid_status)
+        except Exception as e:
+            return jsonify({'error': f'Error processing bid: {str(e)}'}), 500
 
 
 # --- left off here ---
@@ -666,66 +819,65 @@ def regex_ssn(ssn: str) -> bool:
     return True
 
 
-def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option,
-                                       card_number, cvv,
-                                       expiration_date, vehicle_cost, routing_number,
-                                       account_number):
-    # payment_option = check, card
-    # payment_method = MSRP, BID
-    # here we only deal with Purchases and Payments table
-    # we insert these values into the table
-    # we do grab a signature and store but that will be later in development
-
+def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, payment_option, vehicle_cost, routing_number, account_number):
     try:
-        # Insert purchase information into the database
-
-        # don't worry about signature this round ######
+        # Validate signature
         signature_val = get_signature()
-        if signature_val != 'Yes' or signature_val != 'No':
-            return signature_val  # returns an error back to the frontend
+        if signature_val not in ['Yes', 'No']:
+            return jsonify({'error': 'Invalid signature value.'}), 400
         elif signature_val == 'No':
-            return jsonify({'message': 'You must provide a signature to purchase a vehicle.'}), 401
+            return jsonify({'error': 'You must provide a signature to purchase a vehicle.'}), 401
 
+        # Calculate payment values
         valuePaid_value = payment_amount
         valueToPay_value = vehicle_cost - payment_amount
 
-        # no need to add into financing
-
+        # Add payment record
         new_payment = Payments(
             paymentStatus='Confirmed',
             valuePaid=valuePaid_value,
             valueToPay=valueToPay_value,
             initialPurchase=datetime.now(),
             lastPayment=datetime.now(),
-            paymentType=payment_option,  # payment_option = check, card
+            paymentType=payment_option,
             servicePurchased='Vehicle Purchase',
-            cardNumber=card_number,
-            expirationDate=expiration_date,
-            CVV=cvv,
+            # cardNumber=card_number,
+            # expirationDate=expiration_date,
+            # CVV=cvv,
             routingNumber=routing_number,
             bankAcctNumber=account_number,
             memberID=member_id,
             financingID=None
         )
-
         db.session.add(new_payment)
+
+        # Commit payment record
         db.session.commit()
 
+        # Add purchase record
         new_purchase = Purchases(
             VIN_carID=vehicle_vin,
             memberID=member_id,
-            confirmationNumber=confirmation_number_generation(),  # You may generate a confirmation number here
-            purchaseType='Vehicle/Add-on Purchase',
-            purchaseDate=datetime.now(),
-            signature=signature_val
+            confirmationNumber=confirmation_number_generation(),
+            # purchaseType='Vehicle/Add-on Purchase',
+            # purchaseDate=datetime.now(),
+            # signature=signature_val
         )
-
         db.session.add(new_purchase)
+
+        # Commit purchase record
         db.session.commit()
+
         return jsonify({'message': 'Vehicle purchase processed successfully.'}), 200
+
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Integrity error occurred. Please check your input data.'}), 400
+
     except Exception as e:
         db.session.rollback()
-        return jsonify({'message': f'Error: {str(e)}'}), 500
+        return jsonify({'error': f'Error processing vehicle purchase: {str(e)}'}), 500
+
 
 
 @app.route('/api/vehicle-purchase/new-bid-insert', methods=['POST'])
@@ -751,11 +903,18 @@ def bid_insert_no_financing(member_id, bid_value, bid_status):
 
 
 def return_vehicle_cost(vehicle_vin):
-    # we return the cost of the vehicle here based on the vehicle_vin passed into the function
+    # Validate vehicle VIN
+    # if not is_valid_vin(vehicle_vin):
+    #     raise ValueError("Invalid VIN format.")
+
+    # Retrieve vehicle price from the database
     vehicle = CarInfo.query.filter_by(VIN_carID=vehicle_vin).first()
+    
     if not vehicle:
-        return -1
+        raise ValueError("Vehicle with VIN {} not found.".format(vehicle_vin))
+
     return vehicle.price
+
 
 
 def charCompany(cardNumber: str) -> str:
@@ -773,9 +932,13 @@ def charCompany(cardNumber: str) -> str:
 
 
 def confirmation_number_generation() -> str:
-    # this function generates the confirmation number randomely
-    total_chars = string.ascii_uppercase + string.digits
-    return ''.join(random.choice(total_chars) for i in range(13))
+    try:
+        total_chars = string.ascii_uppercase + string.digits
+        return ''.join(random.choice(total_chars) for i in range(13))
+    except Exception as e:
+        # Log the exception or handle it appropriately
+        print(f"Error generating confirmation number: {e}")
+        return None
 
 
 def creditScoreGenerator() -> int:

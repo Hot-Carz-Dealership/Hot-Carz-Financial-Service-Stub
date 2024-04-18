@@ -165,6 +165,7 @@ class Bids(db.Model):
     __tablename__ = 'Bids'
     bidID = db.Column(db.Integer, primary_key=True, autoincrement=True)
     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
+    VIN_carID = db.Column(db.String(17)) #Bids Should be attached to some vehicle
     bidValue = db.Column(db.DECIMAL(10, 2))
     bidStatus = db.Column(Enum('Confirmed', 'Denied', 'Processing', 'None'))
     bidTimestamp = db.Column(db.TIMESTAMP)
@@ -178,9 +179,10 @@ class Purchases(db.Model):
     VIN_carID = db.Column(db.String(17), ForeignKey('CarVINs.VIN_carID'))
     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
     confirmationNumber = db.Column(db.String(13), unique=True)
-    purchaseType = db.Column(Enum('Vehicle/Add-on Purchase', 'Vehicle/Add-on Continuing Payment', 'Service Payment'))
-    purchaseDate = db.Column(db.TIMESTAMP)
-    signature = db.Column(Enum('Yes', 'No'))
+    # TODO: Add these to table in MySQL
+    # purchaseType = db.Column(Enum('Vehicle/Add-on Purchase', 'Vehicle/Add-on Continuing Payment', 'Service Payment'))
+    # purchaseDate = db.Column(db.TIMESTAMP)
+    # signature = db.Column(Enum('Yes', 'No'))
 
 
 class Addons(db.Model):
