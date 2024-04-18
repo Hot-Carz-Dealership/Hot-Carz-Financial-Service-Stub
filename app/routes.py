@@ -198,14 +198,13 @@ def all_purchases():
 
     return jsonify({'purchases': purchases_list}), 200
 
-
+# TODO : Need to fix the api to handle crashes missing data or fix up the db
+# Get to it after vehicle purchases are actually going thru succesfully
 @app.route('/api/member/vehicle-purchases', methods=['GET'])
 # this endpoint is used to return all vehicle purchase information for an authorized customer to view their past vehicle purchases
 def member_vehicle_purchases():
     
-    #   member_session_id = session.get('member_session_id')  # sessions with Auth for a member who has bought a customer
-    # TODO: Temp solution
-    member_session_id = request.args.get('memberID')
+    member_session_id = session.get('member_session_id')  # sessions with Auth for a member who has bought a customer
 
     if member_session_id is None:
         return jsonify({'message': 'No session id provided'}), 404
