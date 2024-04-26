@@ -8,6 +8,10 @@ load_dotenv()
 
 class Config:
     # General configuration settings
-    SECRET_KEY = os.getenv("SECRET_KEY")
-    SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://root:{os.getenv('SECRET_KEY')}@localhost/dealership_backend"
+    # --------------- check for if testing is needed for this stub -------------
+
+    # SECRET_KEY = os.getenv("SECRET_KEY")
+    # SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://root:{os.getenv('SECRET_KEY')}@localhost/dealership_backend"
+
+    SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://root:aGGeAzhlGdyhqpkesCDkjgcyKXHYXEuK@viaduct.proxy.rlwy.net:20836/dealership_backend"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
