@@ -392,6 +392,7 @@ def current_bids():
                 car = CarInfo.query.filter_by(VIN_carID=purchase.VIN_carID).first()
                 if car:
                     bid_info = {
+                        'bidID' : bid.bidID,
                         'make': car.make,
                         'model': car.model,
                         'VIN': car.VIN_carID,
