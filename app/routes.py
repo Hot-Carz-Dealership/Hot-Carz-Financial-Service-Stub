@@ -380,7 +380,7 @@ def member_finance_loan_payments():
     return jsonify({'payments': payments_data}), 200
 
 
-@app.route('/api/current-bids', methods=['GET', 'POST'])
+@app.route('/api/manager/current-bids', methods=['GET', 'POST'])
 def current_bids():
     if request.method == 'GET':
         # GET Protocol, you want to return all current bids
@@ -414,6 +414,53 @@ def current_bids():
             return jsonify({'message': 'Bid status updated successfully'})
         else:
             return jsonify({'error': 'Bid not found'}), 404
+
+
+@app.route('/api/member/current-bids', methods=['GET', 'POST'])
+def current_member_bids():
+    # check if the member is logged in, if not redirect them to log in
+    member_id = session.get('member_session_id')
+    if not member_id:
+        return jsonify({'message': 'Unauthorized access. Please log in.'}), 401
+
+    # check if the member exists
+    member = Member.query.get(member_id)
+    if not member:
+        return jsonify({'message': 'Member not found'}), 404
+
+    # GET Request: returns all bid information based on the logged in member and their memberID
+    if request.method == 'GET':
+        bids = Bids.query.filter_by(memberID=member_id).all()
+        if not bids:
+            return jsonify({'message': 'No bids found for this member'}), 404
+        bid_info = [{'bidID': bid.bidID,
+                     'memberID': bid.memberID,
+                     'VIN_carID': bid.VIN_carID,
+                     'bidValue': bid.bidValue,
+                     'bidStatus': bid.bidStatus,
+                     'bidTimestamp': bid.bidTimestamp
+                     }
+                    for bid in bids]
+        return jsonify(bid_info), 200
+    elif request.method == 'POST':
+        # frontend needs to pass these values in for it to work
+        data = request.json
+        bid_id = data.get('bid_id') # these should work as a button accociated with the bid value/row
+        new_bid_value = data.get('new_bid_value')
+
+        if bid_id is None or new_bid_value is None:
+            return jsonify({'message': 'Bid ID and new Bid Value is required in the request'}), 400
+
+        # finds the denied bid and then copies all other relevant meta data in a nice manner to avoid stupid overworking things
+        denied_bid = Bids.query.filter_by(memberID=member_id, bidID=bid_id, bidStatus='Denied').first()
+        if denied_bid:
+            new_bid = Bids(memberID=member_id, VIN_carID=denied_bid.VIN_carID, bidValue=new_bid_value,
+                           bidStatus='Processing', bidTimestamp=datetime.now())
+            db.session.add(new_bid)
+            db.session.commit()
+            return jsonify({'message': 'New bid placed successfully'}), 201
+        else:
+            return jsonify({'message': 'Denied bid not found for this member with the provided bid ID'}), 404
 
 
 @app.route('/api/vehicle-purchase/new-vehicle-no-finance/bid-accepted', methods=['POST'])
