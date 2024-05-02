@@ -268,9 +268,9 @@ def member_purchases():
             'initialPurchase': str(payment.initialPurchase),  # Convert to string
             'lastPayment': str(payment.lastPayment),  # Convert to string
             'paymentType': payment.paymentType,
-            'cardNumber': payment.cardNumber,
-            'expirationDate': payment.expirationDate,
-            'CVV': payment.CVV,
+            # 'cardNumber': payment.cardNumber,
+            # 'expirationDate': payment.expirationDate,
+            # 'CVV': payment.CVV,
             'routingNumber': payment.routingNumber,
             'bankAcctNumber': payment.bankAcctNumber,
             'memberID': payment.memberID,
@@ -288,7 +288,7 @@ def member_purchases():
             'loan_total': finance.loan_total,
             'down_payment': finance.down_payment,
             'percentage': finance.percentage,
-            'monthly_sum': finance.monthly_sum,
+            'monthly_sum': finance.monthly_payment_sum,
             'remaining_months': finance.remaining_months
         }
         financing_data.append(financing_info)
@@ -411,7 +411,7 @@ def current_bids():
         if bid:
             bid.bidStatus = confirmation_status
             db.session.commit()
-            return jsonify({'message': 'Bid status updated successfully'})
+            return jsonify({'message': 'Bid status updated successfully'}),200
         else:
             return jsonify({'error': 'Bid not found'}), 404
 
@@ -929,13 +929,14 @@ def msrp_vehicle_purchase_no_financing(vehicle_vin, payment_amount, member_id, p
 
 
 @app.route('/api/vehicle-purchase/new-bid-insert', methods=['POST'])
-def bid_insert_no_financing(member_id, bid_value, bid_status):
+def bid_insert_no_financing(member_id, VIN_carID, bid_value, bid_status):
     # Here we only deal with the Bids Table
     # Here we only deal with inserting NEW bids into the backend with no financing
     try:
         # Create a new bid entry
         new_bid = Bids(
             memberID=member_id,
+            VIN_carID=VIN_carID,
             bidValue=bid_value,
             bidStatus=bid_status,
             bidTimestamp=datetime.now()
@@ -948,6 +949,8 @@ def bid_insert_no_financing(member_id, bid_value, bid_status):
         # Rollback the transaction in case of an error
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
+
+
 
 
 def return_vehicle_cost(vehicle_vin):
