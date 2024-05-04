@@ -171,6 +171,7 @@ class Bids(db.Model):
     bidValue = db.Column(db.DECIMAL(10, 2))
     bidStatus = db.Column(Enum('Confirmed', 'Denied', 'Processing', 'None'))
     bidTimestamp = db.Column(db.TIMESTAMP)
+    last_updated_by = db.Column(db.Integer, ForeignKey('Employee.employeeID'))
 
 
 class Purchases(db.Model):
