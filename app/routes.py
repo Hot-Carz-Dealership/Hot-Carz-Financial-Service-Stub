@@ -11,6 +11,8 @@ from sqlalchemy import text, desc, func
 from flask import jsonify, request, session
 from sqlalchemy.exc import IntegrityError
 
+import calendar
+
 ''' all the Financial Services APIs/ENDPOINTS are configured and exposed in this .py file '''
 
 '''ALL PURCHASES ARE NOW ONLY MADE WITH BANK ROUTING AND ACCT NUMBER'''
@@ -606,27 +608,71 @@ def monthly_sales_report():
 
     # request the parameters for monthly reports and in which year as well
     # have these values return in some like tab like or drop down value from the manager dashboard view
-    month = request.args.get('month')  # have it be from 1-12
-    year = request.args.get('year')  # have it be in YYYY format
+    # Get month and year from request parameters
+    month = request.args.get('month')  # 1-12 for selected month
+    year = request.args.get('year')    # YYYY format for selected year
 
-    # use for value testing and debugging
-    # month = 2
-    # year = 23
+    # Debugging statements for month and year
+    print("Selected month:", month)
+    print("Selected year:", year)
 
-    # the only table that stores purchases is the 'Purchases' table.
-    # the finance, bids and purchases table only hold value but aren't needed for the total calculation
-    # of revenue bought into the dealership as they are not the tables used for when payment transactions made
-    # only for storing additional info on these transactions made
+    # Get current date
+    current_date = datetime.now()
+
+    # Debugging statement for current date
+    print("Current date:", current_date)
+
+    # Get the last day of the selected month dynamically
+    last_day_of_month = calendar.monthrange(int(year), int(month))[1]
+
+    # Set the start date and end date using the last day of the month
+    start_date = datetime(int(year), int(month), 1)
+    end_date = datetime(int(year), int(month), last_day_of_month)
+
+    # Hardcoded definitions for dates
+    start_of_year = datetime(int(year), 1, 1)
+    last_year_start = datetime(int(year) - 1, 1, 1)
+    last_year_end = datetime(int(year) - 1, 12, 31)
+    last_year_month_start = datetime(int(year) - 1, int(month), 1)
+    
+    # Check if it's February and the last day of the month is 29 (indicating a leap year)
+    if int(month) == 2 and last_day_of_month == 29:
+        # Adjust the last day of February to 28 for non-leap years
+        last_day_of_month = 28
+        
+    last_year_month_end = datetime(int(year) - 1, int(month), last_day_of_month)
+
+    # Debugging statements for dates
+    print("Start date of selected month:", start_date)
+    print("End date of selected month:", end_date)
+    print("Start date of last year:", last_year_start)
+    print("End date of last year:", last_year_end)
+    print("Start date of last year's selected month:", last_year_month_start)
+    print("End date of last year's selected month:", last_year_month_end)
+    # Query purchases for monthly report
     purchases = Purchases.query.filter(db.extract('month', Purchases.purchaseDate) == month,
                                        db.extract('year', Purchases.purchaseDate) == year).all()
 
-    # Prepare sales report data
+    # Prepare sales report data for monthly report
     total_sales = 0
     sales_report = []
 
-    # Calculate total sales from purchases
+    # Calculate total sales and populate sales report for monthly report
     for purchase in purchases:
-        total_sales += purchase.bid.bidValue
+        bid_value = 0  # Default value if bid is None
+        bid_id = None  # Default value for bid ID
+        if purchase.bidID is not None:
+            # If a bid is associated with the purchase, retrieve the bid value and ID
+            bid = Bids.query.get(purchase.bidID)
+            if bid:
+                bid_value = bid.bidValue
+                bid_id = bid.bidID
+            else:
+                print(f"Bid not found for Purchase ID: {purchase.purchaseID}")
+
+        total_sales += bid_value
+        print(f"timestamp is  {purchase.purchaseDate}")
+
         sales_report.append({
             'purchase_id': purchase.purchaseID,
             'member_id': purchase.memberID,
@@ -634,11 +680,30 @@ def monthly_sales_report():
             'confirmation_number': purchase.confirmationNumber,
             'purchase_type': purchase.purchaseType,
             'purchase_timestamp': purchase.purchaseDate.isoformat(),
-            'bid_value': str(purchase.bid.bidValue)  # Convert Decimal to string for JSON serialization
+            'bid_id': bid_id,
+            'bid_value': str(bid_value)  # Convert Decimal to string for JSON serialization
         })
+
+    # Query purchases for other types of reports
+    all_time_sales = Purchases.query.all()
+    yearly_sales = Purchases.query.filter(Purchases.purchaseDate >= start_date, Purchases.purchaseDate <= end_date).all()
+    last_year_sales = Purchases.query.filter(Purchases.purchaseDate >= last_year_start, Purchases.purchaseDate <= last_year_end).all()
+    last_year_month_sales = Purchases.query.filter(Purchases.purchaseDate >= last_year_month_start, Purchases.purchaseDate <= last_year_month_end).all()
+
+    # Calculate total sales for other types of reports
+    total_all_time_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in all_time_sales)
+    total_yearly_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in yearly_sales)
+    total_last_year_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in last_year_sales)
+    total_last_year_month_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in last_year_month_sales)
+
+
 
     return jsonify({
         'total_sales': str(total_sales),  # Convert total sales to string for JSON serialization
+        'all_time_sales': str(total_all_time_sales),
+        'yearly_sales': str(total_yearly_sales),
+        'last_year_sales': str(total_last_year_sales),
+        'last_year_month_sales': str(total_last_year_month_sales),
         'sales_report': sales_report
     }), 200
 
