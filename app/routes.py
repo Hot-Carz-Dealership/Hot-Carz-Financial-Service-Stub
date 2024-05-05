@@ -400,7 +400,8 @@ def current_bids():
                         'VIN': car.VIN_carID,
                         'MSRP': car.price,
                         'bidValue': bid.bidValue,
-                        'bidStatus': bid.bidStatus
+                        'bidStatus': bid.bidStatus,
+                        'memberID' : bid.memberID
                     }
                     bid_data.append(bid_info)
         return jsonify(bid_data)
