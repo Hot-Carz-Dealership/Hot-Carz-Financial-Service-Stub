@@ -240,18 +240,6 @@ def current_member_bids():
 
 
 
-# not in use yet
-@app.route('/api/vehicle-purchase/signature', methods=['POST'])
-def get_signature():
-    data = request.json
-    signature = int(data.get('signature'))  # yes = 1, no = 0
-    if signature == 0:
-        return 'No'
-    elif signature == 1:
-        return 'Yes'
-    else:
-        return jsonify({'message': 'Invalid VALUE'}), 400
-
 
 ''' Helper Functions'''
 
@@ -1193,3 +1181,17 @@ def adjust_loan_with_downpayment(vehicle_cost, down_payment):
 #         return jsonify({'error': str(e)}), 500
 
 
+'''i DONT THINK THIS ROUTE IS EVER CALLED'''
+
+
+# # not in use yet
+# @app.route('/api/vehicle-purchase/signature', methods=['POST'])
+# def get_signature():
+#     data = request.json
+#     signature = int(data.get('signature'))  # yes = 1, no = 0
+#     if signature == 0:
+#         return 'No'
+#     elif signature == 1:
+#         return 'Yes'
+#     else:
+#         return jsonify({'message': 'Invalid VALUE'}), 400
