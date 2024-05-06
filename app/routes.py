@@ -3,13 +3,17 @@
 import re
 import random
 import string
+import hashlib
+
 import bcrypt
 from . import app
 from .models import *
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import text, desc, func
 from flask import jsonify, request, session
 from sqlalchemy.exc import IntegrityError
+from decimal import Decimal, ROUND_HALF_UP
+
 
 import calendar
 
@@ -521,23 +525,87 @@ def monthly_sales_report():
 #     return jsonify({'purchases': purchases_list}), 200
 
 
+'''ONE SMALL STEP 🧑‍🚀'''
+
+
+'''
+        # Get the member ID from the request JSON data
+        data = request.json
+        member_id = data.get('member_id')
+
+'''
+
+@app.route('/api/vehicle-purchase/apply-for-financing', methods=['POST'])
+# Route just to apply for financing and returns terms if user is eligible
+# This wont add to any tables yet,
+# we'll have the front end send back the same terms if users accepts in another route
+##The user will accept by typing in their name or initials(aka signing)
+def apply_for_financing():
+    try:
+        # customer auth for making sure they are logged in and have an account
+        # member_id = session.get('member_session_id')
+        # Get the member ID from the request JSON data
+        data = request.json
+        member_id = data.get('member_id')
+        if member_id is None:
+            return jsonify({'message': 'Invalid session'}), 400
+
+        # frontend needs to send these values to the backend
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        Vin_carID = data.get('Vin_carID')
+        down_payment = float(data.get('down_payment'))
+        monthly_income = float(data.get('monthly_income'))
+        vehicle_cost = float(
+            data.get('vehicle_cost'))  # Front end can send this based on if the user won a bid or buying at MSRP
+
+        credit_score = creditScoreGenerator(member_id, monthly_income)
+        total_cost = adjust_loan_with_downpayment(vehicle_cost, down_payment)
+        finance_interest = calculateInterest(total_cost, monthly_income, credit_score)
+
+        # Loan eligibility
+        loan_eligibility = check_loan_eligibility(total_cost, monthly_income)
+        if not loan_eligibility:
+            return jsonify({
+                               'message': 'Your yearly income is not sufficient to take on this loan. Reapply with more down payment'}), 400
+
+        # downPayment_value = total_cost - financing_loan_amount
+        valueToPay_value = round(total_cost + finance_interest, 2)
+        paymentPerMonth_value = round(valueToPay_value / 48, 2)
+
+        # Create a dictionary with financing terms
+        financing_terms = {
+            'member_id': member_id,
+            'income': int(monthly_income) * 12,
+            'credit_score': credit_score,
+            'loan_total': valueToPay_value,
+            'down_payment': down_payment,
+            'percentage': interest_rate(credit_score),
+            'monthly_payment_sum': paymentPerMonth_value,
+            'remaining_months': 48,
+            'Vin_carID': Vin_carID,
+            'financed_amount': total_cost,
+            'interest_total': finance_interest
+        }
+
+        # Return the financing terms as JSON
+        # Front End should save this somewhere
+        # If the user accepts by signing then use the /insert-financing route
+
+        return jsonify({'financing_terms': financing_terms}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+
+
+
+
+
 
 ''' Helper Functions'''
 
-
-def regex_card_check(card_number: str, cvv: str, expiration_date: str) -> bool:
-    # Regex validation for card number, CVV, and expiration date
-    card_regex = re.compile(r'^[0-9]{16}$')
-    cvv_regex = re.compile(r'^[0-9]{3}$')
-    expiration_regex = re.compile(r'^(0[1-9]|1[0-2])/[0-9]{2}$')  # MM/YY experation date format
-
-    if not card_regex.match(card_number):
-        return False
-    if not cvv_regex.match(cvv):
-        return False
-    if not expiration_regex.match(expiration_date):
-        return False
-    return True
 
 
 def regex_bank_acct_check(routing_number: str, account_number: str) -> bool:
@@ -576,33 +644,20 @@ def return_vehicle_cost(vehicle_vin):
 
 
 
-def charCompany(cardNumber: str) -> str:
-    # this function returns the credit card company of the card input by the customer
-    if cardNumber[0] == '4':
-        return 'Visa'
-    elif cardNumber[0] == '5':
-        return 'Mastercard'
-    elif cardNumber[0] == '6':
-        return 'Discover'
-    elif cardNumber[0] == '3':
-        return 'American Express'
-    else:
-        return 'Other'
 
 
-def confirmation_number_generation() -> str:
-    try:
-        total_chars = string.ascii_uppercase + string.digits
-        return ''.join(random.choice(total_chars) for i in range(13))
-    except Exception as e:
-        # Log the exception or handle it appropriately
-        print(f"Error generating confirmation number: {e}")
-        return None
-
-
-def creditScoreGenerator() -> int:
-    # generates a random creditScore
+def creditScoreGenerator(member_id: int, monthly_income: float) -> int:
+    # Creates a random credit score based on id and income so that the same is always returned
+    # Create a unique seed based on member_id and monthly_income
+    seed = hashlib.sha256(f"{member_id}-{monthly_income}".encode()).hexdigest()
+    # Convert the seed to an integer for seeding the random number generator
+    seed_int = int(seed, 16) % (10 ** 8)  # Modulo to keep the number within an appropriate range
+    # Seed the random number generator
+    random.seed(seed_int)
+    # Generate a random credit score
     return random.randint(500, 850)
+
+
 
 
 def interest_rate(creditScore: int) -> int:
@@ -643,6 +698,26 @@ def adjust_loan_with_downpayment(vehicle_cost, down_payment):
     # Recalculate the loan amount based on the new down_payment
     loan_amount = vehicle_cost - down_payment
     return loan_amount
+
+def calculateInterest(vehicleCost: int, monthlyIncome: int, creditscore: int) -> float:
+    # generates the total amount financed after interest 
+
+    base_loan_interest_rate = interest_rate(creditscore)
+    # Calculate financing value based on vehicle cost and monthly income
+    final_financing_percentage = base_loan_interest_rate + ((vehicleCost / monthlyIncome) * 100)
+    financing_loan_value = (final_financing_percentage / 100) * vehicleCost
+    return round(financing_loan_value, 2)
+
+
+def confirmation_number_generation() -> str:
+    try:
+        total_chars = string.ascii_uppercase + string.digits
+        return ''.join(random.choice(total_chars) for i in range(13))
+    except Exception as e:
+        # Log the exception or handle it appropriately
+        print(f"Error generating confirmation number: {e}")
+        return None
+
 
 
 '''Anything I thought Wasnt used was moved down here'''
