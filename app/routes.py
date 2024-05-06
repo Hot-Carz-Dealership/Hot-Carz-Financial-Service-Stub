@@ -181,187 +181,6 @@ def login():
         return jsonify({'error': str(e)}), 500
 
 
-# TODO : Need to fix the api to handle crashes missing data or fix up the db
-# Get to it after vehicle purchases are actually going thru succesfully
-@app.route('/api/member/vehicle-purchases', methods=['GET'])
-# this endpoint is used to return all vehicle purchase information for an authorized customer to view their past vehicle purchases
-def member_vehicle_purchases():
-    
-    member_session_id = session.get('member_session_id')  # sessions with Auth for a member who has bought a customer
-
-    if member_session_id is None:
-        return jsonify({'message': 'No session id provided'}), 404
-
-    vehicle_purchases_member = Purchases.query.filter_by(
-        memberID=member_session_id).all()  # returns vehicles purchased by the customer/member
-    if not vehicle_purchases_member:
-        return jsonify({'message': 'No purchases found for this member'}), 404
-
-    # Extract necessary purchase details
-    purchases_info = []
-    for purchase in vehicle_purchases_member:
-        car_info = CarInfo.query.filter_by(VIN_carID=purchase.VIN_carID).first()
-        bid_info = Bids.query.filter_by(bidID=purchase.bidID).first()
-
-        # Access payment type directly from purchase object
-        # payment_type = purchase.payment.paymentType
-
-        purchases_info.append({
-            'purchaseID': purchase.purchaseID,
-            'car_make': car_info.make,
-            'car_model': car_info.model,
-            'car_year': car_info.year,
-            # 'payment_type': payment_type,
-            'bid_value': bid_info.bidValue,
-            'bid_status': bid_info.bidStatus,
-            'confirmation_number': purchase.confirmationNumber
-        })
-    return jsonify(purchases_info), 200
-
-
-@app.route('/api/member/payment-purchases-finance-bid-data', methods=['GET'])
-# this endpoint is used to return all data of members regarding payment, purchases, finance and bids informations of
-# the member who is authorized into the dealership and logged in and has a history here in the dealership
-def member_purchases():
-    member_session_id = session.get('member_session_id')
-    if member_session_id is None:
-        return jsonify({'message': 'No session id provided'}), 400
-
-    # return payments, financing, bids, and purchase history for the member
-    payments = Payments.query.filter_by(memberID=member_session_id).all()
-    financing = Financing.query.filter_by(memberID=member_session_id).all()
-    bids = Bids.query.filter_by(memberID=member_session_id).all()
-    purchases = Purchases.query.filter_by(memberID=member_session_id).all()
-
-    # for testing purposes
-    # payments = Payments.query.all()
-    # financing = Financing.query.all()
-    # bids = Bids.query.all()
-    # purchases = Purchases.query.all()
-
-    # Payment information
-    payment_info = []
-    for payment in payments:
-        payment_data = {
-            'paymentID': payment.paymentID,
-            'paymentStatus': payment.paymentStatus,
-            'valuePaid': payment.valuePaid,
-            'valueToPay': payment.valueToPay,
-            'initialPurchase': str(payment.initialPurchase),  # Convert to string
-            'lastPayment': str(payment.lastPayment),  # Convert to string
-            'paymentType': payment.paymentType,
-            # 'cardNumber': payment.cardNumber,
-            # 'expirationDate': payment.expirationDate,
-            # 'CVV': payment.CVV,
-            'routingNumber': payment.routingNumber,
-            'bankAcctNumber': payment.bankAcctNumber,
-            'memberID': payment.memberID,
-            'financingID': payment.financingID
-        }
-        payment_info.append(payment_data)
-
-    # Financing information
-    financing_data = []
-    for finance in financing:
-        financing_info = {
-            'financingID': finance.financingID,
-            'income': finance.income,
-            'credit_score': finance.credit_score,
-            'loan_total': finance.loan_total,
-            'down_payment': finance.down_payment,
-            'percentage': finance.percentage,
-            'monthly_sum': finance.monthly_payment_sum,
-            'remaining_months': finance.remaining_months
-        }
-        financing_data.append(financing_info)
-
-    # Bid information
-    bid_info = []
-    for bid in bids:
-        bid_data = {
-            'bidID': bid.bidID,
-            'bidValue': bid.bidValue,
-            'Vin_carID': bid.VIN_carID,
-            'bidStatus': bid.bidStatus,
-            'bidTimestamp': str(bid.bidTimestamp)  # Convert to string
-        }
-        bid_info.append(bid_data)
-
-    # Purchase history
-    purchase_history = []
-    for purchase in purchases:
-        purchase_data = {
-            'purchaseID': purchase.purchaseID,
-            'bidID': purchase.bidID,
-            'VIN_carID': purchase.VIN_carID,
-            'memberID': purchase.memberID,
-            'confirmationNumber': purchase.confirmationNumber,
-            'purchaseType': purchase.purchaseType,
-            'purchaseDate': str(purchase.purchaseDate)  # Convert to string
-        }
-        purchase_history.append(purchase_data)
-
-    # Construct the response
-    response_data = {
-        'payments': payment_info,
-        'financing': financing_data,
-        'bids': bid_info,
-        'purchase_history': purchase_history
-    }
-
-    return jsonify(response_data), 200
-
-
-@app.route('/api/member-or-employee/finance-loan-payments', methods=['GET'])
-# this API provides a monthly payments view/report for requested loan
-# this can be used by both members and employee
-def member_finance_loan_payments():
-    member_id = session.get('member_session_id')
-    if not member_id:
-        employee_id = session.get('employee_session_id')
-        if not employee_id:
-            return jsonify({'message': 'Unauthorized login or access for member/manager'}), 401
-        employee = Employee.query.filter_by(employeeID=employee_id, employeeType='Manager').first()
-        if not employee:
-            return jsonify({'message': 'This login does not belong to a Manager'}), 401
-        data = request.json
-        member_id = data.get('memberID')
-    member = Member.query.filter_by(memberID=member_id).first()
-    if member is None:
-        return jsonify({'message': 'Unauthorized access'}), 401
-
-    # for debugging purposes
-    # member_id = 2
-
-    # join and filter the tables to fetch payments on the member's loan
-    payments = db.session.query(Payments) \
-        .join(Financing, Payments.financingID == Financing.financingID) \
-        .filter(Financing.memberID == member_id) \
-        .filter(Financing.financingID != 6) \
-        .all()
-
-    # format the data for json
-    payments_data = []
-    for payment in payments:
-        payments_data.append({
-            'paymentID': payment.paymentID,
-            'paymentStatus': payment.paymentStatus,
-            'valuePaid': payment.valuePaid,
-            'valueToPay': payment.valueToPay,
-            'initialPurchase': str(payment.initialPurchase),
-            'lastPayment': str(payment.lastPayment),
-            'paymentType': payment.paymentType,
-            'cardNumber': payment.cardNumber,
-            'expirationDate': payment.expirationDate,
-            'CVV': payment.CVV,
-            'routingNumber': payment.routingNumber,
-            'bankAcctNumber': payment.bankAcctNumber,
-            'memberID': payment.memberID,
-            'financingID': payment.financingID
-        })
-    return jsonify({'payments': payments_data}), 200
-
-
 
 
 @app.route('/api/member/current-bids', methods=['GET', 'POST'])
@@ -1202,3 +1021,189 @@ def adjust_loan_with_downpayment(vehicle_cost, down_payment):
 #         purchases_list.append(purchase_data)
 
 #     return jsonify({'purchases': purchases_list}), 200
+
+'''i DONT THINK THIS ROUTE IS EVER CALLED'''
+# # Get to it after vehicle purchases are actually going thru succesfully
+# @app.route('/api/member/vehicle-purchases', methods=['GET'])
+# # this endpoint is used to return all vehicle purchase information for an authorized customer to view their past vehicle purchases
+# def member_vehicle_purchases():
+    
+#     member_session_id = session.get('member_session_id')  # sessions with Auth for a member who has bought a customer
+
+#     if member_session_id is None:
+#         return jsonify({'message': 'No session id provided'}), 404
+
+#     vehicle_purchases_member = Purchases.query.filter_by(
+#         memberID=member_session_id).all()  # returns vehicles purchased by the customer/member
+#     if not vehicle_purchases_member:
+#         return jsonify({'message': 'No purchases found for this member'}), 404
+
+#     # Extract necessary purchase details
+#     purchases_info = []
+#     for purchase in vehicle_purchases_member:
+#         car_info = CarInfo.query.filter_by(VIN_carID=purchase.VIN_carID).first()
+#         bid_info = Bids.query.filter_by(bidID=purchase.bidID).first()
+
+#         # Access payment type directly from purchase object
+#         # payment_type = purchase.payment.paymentType
+
+#         purchases_info.append({
+#             'purchaseID': purchase.purchaseID,
+#             'car_make': car_info.make,
+#             'car_model': car_info.model,
+#             'car_year': car_info.year,
+#             # 'payment_type': payment_type,
+#             'bid_value': bid_info.bidValue,
+#             'bid_status': bid_info.bidStatus,
+#             'confirmation_number': purchase.confirmationNumber
+#         })
+#     return jsonify(purchases_info), 200
+
+
+'''i DONT THINK THIS ROUTE IS EVER CALLED'''
+
+# @app.route('/api/member/payment-purchases-finance-bid-data', methods=['GET'])
+# # this endpoint is used to return all data of members regarding payment, purchases, finance and bids informations of
+# # the member who is authorized into the dealership and logged in and has a history here in the dealership
+# def member_purchases():
+    # member_session_id = session.get('member_session_id')
+    # if member_session_id is None:
+    #     return jsonify({'message': 'No session id provided'}), 400
+
+    # # return payments, financing, bids, and purchase history for the member
+    # payments = Payments.query.filter_by(memberID=member_session_id).all()
+    # financing = Financing.query.filter_by(memberID=member_session_id).all()
+    # bids = Bids.query.filter_by(memberID=member_session_id).all()
+    # purchases = Purchases.query.filter_by(memberID=member_session_id).all()
+
+    # # for testing purposes
+    # # payments = Payments.query.all()
+    # # financing = Financing.query.all()
+    # # bids = Bids.query.all()
+    # # purchases = Purchases.query.all()
+
+    # # Payment information
+    # payment_info = []
+    # for payment in payments:
+    #     payment_data = {
+    #         'paymentID': payment.paymentID,
+    #         'paymentStatus': payment.paymentStatus,
+    #         'valuePaid': payment.valuePaid,
+    #         'valueToPay': payment.valueToPay,
+    #         'initialPurchase': str(payment.initialPurchase),  # Convert to string
+    #         'lastPayment': str(payment.lastPayment),  # Convert to string
+    #         'paymentType': payment.paymentType,
+    #         # 'cardNumber': payment.cardNumber,
+    #         # 'expirationDate': payment.expirationDate,
+    #         # 'CVV': payment.CVV,
+    #         'routingNumber': payment.routingNumber,
+    #         'bankAcctNumber': payment.bankAcctNumber,
+    #         'memberID': payment.memberID,
+    #         'financingID': payment.financingID
+    #     }
+    #     payment_info.append(payment_data)
+
+    # # Financing information
+    # financing_data = []
+    # for finance in financing:
+    #     financing_info = {
+    #         'financingID': finance.financingID,
+    #         'income': finance.income,
+    #         'credit_score': finance.credit_score,
+    #         'loan_total': finance.loan_total,
+    #         'down_payment': finance.down_payment,
+    #         'percentage': finance.percentage,
+    #         'monthly_sum': finance.monthly_payment_sum,
+    #         'remaining_months': finance.remaining_months
+    #     }
+    #     financing_data.append(financing_info)
+
+    # # Bid information
+    # bid_info = []
+    # for bid in bids:
+    #     bid_data = {
+    #         'bidID': bid.bidID,
+    #         'bidValue': bid.bidValue,
+    #         'Vin_carID': bid.VIN_carID,
+    #         'bidStatus': bid.bidStatus,
+    #         'bidTimestamp': str(bid.bidTimestamp)  # Convert to string
+    #     }
+    #     bid_info.append(bid_data)
+
+    # # Purchase history
+    # purchase_history = []
+    # for purchase in purchases:
+    #     purchase_data = {
+    #         'purchaseID': purchase.purchaseID,
+    #         'bidID': purchase.bidID,
+    #         'VIN_carID': purchase.VIN_carID,
+    #         'memberID': purchase.memberID,
+    #         'confirmationNumber': purchase.confirmationNumber,
+    #         'purchaseType': purchase.purchaseType,
+    #         'purchaseDate': str(purchase.purchaseDate)  # Convert to string
+    #     }
+    #     purchase_history.append(purchase_data)
+
+    # # Construct the response
+    # response_data = {
+    #     'payments': payment_info,
+    #     'financing': financing_data,
+    #     'bids': bid_info,
+    #     'purchase_history': purchase_history
+    # }
+
+    # return jsonify(response_data), 200
+
+'''i DONT THINK THIS ROUTE IS EVER CALLED'''
+
+# @app.route('/api/member-or-employee/finance-loan-payments', methods=['GET'])
+# # this API provides a monthly payments view/report for requested loan
+# # this can be used by both members and employee
+# def member_finance_loan_payments():
+#     member_id = session.get('member_session_id')
+#     if not member_id:
+#         employee_id = session.get('employee_session_id')
+#         if not employee_id:
+#             return jsonify({'message': 'Unauthorized login or access for member/manager'}), 401
+#         employee = Employee.query.filter_by(employeeID=employee_id, employeeType='Manager').first()
+#         if not employee:
+#             return jsonify({'message': 'This login does not belong to a Manager'}), 401
+#         data = request.json
+#         member_id = data.get('memberID')
+#     member = Member.query.filter_by(memberID=member_id).first()
+#     if member is None:
+#         return jsonify({'message': 'Unauthorized access'}), 401
+
+#     # for debugging purposes
+#     # member_id = 2
+
+#     # join and filter the tables to fetch payments on the member's loan
+#     payments = db.session.query(Payments) \
+#         .join(Financing, Payments.financingID == Financing.financingID) \
+#         .filter(Financing.memberID == member_id) \
+#         .filter(Financing.financingID != 6) \
+#         .all()
+
+#     # format the data for json
+#     payments_data = []
+#     for payment in payments:
+#         payments_data.append({
+#             'paymentID': payment.paymentID,
+#             'paymentStatus': payment.paymentStatus,
+#             'valuePaid': payment.valuePaid,
+#             'valueToPay': payment.valueToPay,
+#             'initialPurchase': str(payment.initialPurchase),
+#             'lastPayment': str(payment.lastPayment),
+#             'paymentType': payment.paymentType,
+#             'cardNumber': payment.cardNumber,
+#             'expirationDate': payment.expirationDate,
+#             'CVV': payment.CVV,
+#             'routingNumber': payment.routingNumber,
+#             'bankAcctNumber': payment.bankAcctNumber,
+#             'memberID': payment.memberID,
+#             'financingID': payment.financingID
+#         })
+#     return jsonify({'payments': payments_data}), 200
+
+
+'''i DONT THINK THIS ROUTE IS EVER CALLED'''
