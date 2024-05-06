@@ -179,26 +179,6 @@ def login():
         return jsonify({'error': str(e)}), 500
 
 
-
-@app.route('/api/purchases', methods=['GET'])
-# this endpoint returns all of the purchase information to be viewed by the manager or superAdmin
-def all_purchases():
-    # returns all purchases from the purchases Table in the DB
-    purchases = Purchases.query.all()  # queries all purchases
-    purchases_list = []
-
-    for purchase in purchases:
-        purchase_data = {
-            'purchaseID': purchase.purchaseID,
-            'bidID': purchase.bidID,
-            'VIN_carID': purchase.VIN_carID,
-            'memberID': purchase.memberID,
-            'confirmationNumber': purchase.confirmationNumber
-        }
-        purchases_list.append(purchase_data)
-
-    return jsonify({'purchases': purchases_list}), 200
-
 # TODO : Need to fix the api to handle crashes missing data or fix up the db
 # Get to it after vehicle purchases are actually going thru succesfully
 @app.route('/api/member/vehicle-purchases', methods=['GET'])
@@ -380,40 +360,6 @@ def member_finance_loan_payments():
     return jsonify({'payments': payments_data}), 200
 
 
-@app.route('/api/manager/current-bids', methods=['GET', 'POST'])
-def current_bids():
-    if request.method == 'GET':
-        # GET Protocol, you want to return all current bids
-        bids = Bids.query.all()
-        bid_data = []
-        for bid in bids:
-            purchase = Purchases.query.filter_by(bidID=bid.bidID).first()
-            if purchase:
-                car = CarInfo.query.filter_by(VIN_carID=purchase.VIN_carID).first()
-                if car:
-                    bid_info = {
-                        'bidID' : bid.bidID,
-                        'make': car.make,
-                        'model': car.model,
-                        'VIN': car.VIN_carID,
-                        'MSRP': car.price,
-                        'bidValue': bid.bidValue,
-                        'bidStatus': bid.bidStatus
-                    }
-                    bid_data.append(bid_info)
-        return jsonify(bid_data)
-    elif request.method == 'POST':
-        # this POST request is to be used by managers to Confirm or Decline Bids
-        data = request.json
-        bid_id = data.get('bidID')
-        confirmation_status = data.get('confirmationStatus')
-        bid = Bids.query.get(bid_id)
-        if bid:
-            bid.bidStatus = confirmation_status
-            db.session.commit()
-            return jsonify({'message': 'Bid status updated successfully'}),200
-        else:
-            return jsonify({'error': 'Bid not found'}), 404
 
 
 @app.route('/api/member/current-bids', methods=['GET', 'POST'])
@@ -507,7 +453,7 @@ def payment_report():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
+'''This Route is just breaking right now before even testing with /forward'''
 @app.route('/api/manager/monthly-sales-report', methods=['GET'])
 # this API generates monthly sales reports on all payments made in the dealership
 # Scufffedd but i think it works
@@ -665,32 +611,9 @@ def manage_payments():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/member/check-ssn', methods=['POST'])
-# frontend: this api is made so before they put in their financial information, we ask the user for their SSN
-# but we need to check first if they have it in their info. use this before sending ssn value and redirecting to a page to do that
-# in order to not make more work for yourselves
-# this function is to be used before any '/api/vehicle-purchase/...' api's
-def check_ssn():
-    member_session_id = session.get('member_session_id')
-    if member_session_id is None:
-        return jsonify({'message': 'Need a member ID to check if they have an SSN in the DB.'}), 401
-    member_sensitive_info = MemberSensitiveInfo.query.filter_by(memberID=member_session_id).first()
-    if member_sensitive_info.SSN is None:
-        return False  # no SSN
-    else:
-        return True  # yes SSN stored
 
 
-@app.route('/api/member/update-ssn', methods=['POST'])
-def update_ssn(member_session_id):
-    data = request.json
-    ssn = data.get('ssn')
-    if regex_ssn(ssn):
-        return False
-    member_sensitive_info = MemberSensitiveInfo.query.filter_by(memberID=member_session_id).first()
-    member_sensitive_info.SSN = ssn
-    db.session.commit()
-    return True
+
 
 
 # not in use yet
@@ -706,7 +629,7 @@ def get_signature():
         return jsonify({'message': 'Invalid VALUE'}), 400
 
 
-
+''' Helper Functions'''
 
 
 def regex_card_check(card_number: str, cvv: str, expiration_date: str) -> bool:
@@ -828,6 +751,8 @@ def adjust_loan_with_downpayment(vehicle_cost, down_payment):
     loan_amount = vehicle_cost - down_payment
     return loan_amount
 
+
+'''Anything I thought Wasnt used was moved down here'''
 
 # @app.route('/api/vehicle-purchase/new-vehicle-purchase-finance/re-evaluate', methods=['POST'])
 # def reevaluate_finance():
@@ -1282,3 +1207,48 @@ def adjust_loan_with_downpayment(vehicle_cost, down_payment):
 #     except Exception as e:
 #         return jsonify({'error': 'Bid not found for the specified member and vehicle, could not purchase vehicle'}), 404
 
+# @app.route('/api/member/check-ssn', methods=['POST'])
+# # frontend: this api is made so before they put in their financial information, we ask the user for their SSN
+# # but we need to check first if they have it in their info. use this before sending ssn value and redirecting to a page to do that
+# # in order to not make more work for yourselves
+# # this function is to be used before any '/api/vehicle-purchase/...' api's
+# def check_ssn():
+#     member_session_id = session.get('member_session_id')
+#     if member_session_id is None:
+#         return jsonify({'message': 'Need a member ID to check if they have an SSN in the DB.'}), 401
+#     member_sensitive_info = MemberSensitiveInfo.query.filter_by(memberID=member_session_id).first()
+#     if member_sensitive_info.SSN is None:
+#         return False  # no SSN
+#     else:
+#         return True  # yes SSN stored
+
+# @app.route('/api/member/update-ssn', methods=['POST'])
+# def update_ssn(member_session_id):
+#     data = request.json
+#     ssn = data.get('ssn')
+#     if regex_ssn(ssn):
+#         return False
+#     member_sensitive_info = MemberSensitiveInfo.query.filter_by(memberID=member_session_id).first()
+#     member_sensitive_info.SSN = ssn
+#     db.session.commit()
+#     return True
+
+'''i DONT THINK THIS ROUTE IS EVER CALLED'''
+# @app.route('/api/purchases', methods=['GET'])
+# # this endpoint returns all of the purchase information to be viewed by the manager or superAdmin
+# def all_purchases():
+#     # returns all purchases from the purchases Table in the DB
+#     purchases = Purchases.query.all()  # queries all purchases
+#     purchases_list = []
+
+#     for purchase in purchases:
+#         purchase_data = {
+#             'purchaseID': purchase.purchaseID,
+#             'bidID': purchase.bidID,
+#             'VIN_carID': purchase.VIN_carID,
+#             'memberID': purchase.memberID,
+#             'confirmationNumber': purchase.confirmationNumber
+#         }
+#         purchases_list.append(purchase_data)
+
+#     return jsonify({'purchases': purchases_list}), 200
