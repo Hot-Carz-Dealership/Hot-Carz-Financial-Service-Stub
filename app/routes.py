@@ -600,7 +600,62 @@ def apply_for_financing():
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
 
+@app.route('/api/vehicle-purchase/insert-financing', methods=['POST'])
+# Use this route whenever the user accepts the loan to add it to the db
+def insert_financing():
+    try:
 
+        # customer auth for making sure they are logged in and have an account
+        # member_id = session.get('member_session_id')
+        # Get the member ID from the request JSON data
+        data = request.json
+        member_id = data.get('member_id')
+        if member_id is None:
+            return jsonify({'message': 'Invalid session'}), 400
+
+        # Validate required fields
+        data = request.json
+        required_fields = ['VIN_carID', 'income', 'credit_score', 'loan_total', 'down_payment', 'percentage',
+                           'monthly_payment_sum', 'remaining_months']
+        if not all(field in data for field in required_fields):
+            return jsonify({'message': 'Missing required fields'}), 400
+
+        # Retrieve data from the request
+        data = request.json
+        VIN_carID = data.get('VIN_carID')
+        income = data.get('income')
+        credit_score = data.get('credit_score')
+        loan_total = data.get('loan_total')
+        down_payment = data.get('down_payment')
+        percentage = data.get('percentage')
+        monthly_payment_sum = data.get('monthly_payment_sum')
+        remaining_months = data.get('remaining_months')
+
+        if VIN_carID:
+            # Check if the provided VIN exists in the carinfo table
+            car = CarInfo.query.filter_by(VIN_carID=VIN_carID).first()
+            if not car:
+                return jsonify({'error': 'Car with provided VIN not found'}), 404
+
+        # Insert data into the database
+        new_financing = Financing(
+            memberID=member_id,
+            VIN_carID=VIN_carID,
+            income=income,
+            credit_score=credit_score,
+            loan_total=loan_total,
+            down_payment=down_payment,
+            percentage=percentage,
+            monthly_payment_sum=monthly_payment_sum,
+            remaining_months=remaining_months
+        )
+        db.session.add(new_financing)
+        db.session.commit()
+
+        return jsonify({'message': 'Financing information inserted successfully.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error: {str(e)}'}), 500
 
 
 
@@ -626,8 +681,7 @@ def apply_for_financing():
                                 #   ''' Helper Functions'''     #
                                 #                               #
                                 #################################
-
-
+                                
 def regex_bank_acct_check(routing_number: str, account_number: str) -> bool:
     # regex validation for the routing number and account number to be correct
     routing_regex = re.compile(r'^[0-9]{9}$')
