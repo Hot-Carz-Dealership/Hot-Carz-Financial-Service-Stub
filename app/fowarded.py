@@ -268,3 +268,22 @@ def monthly_sales_report():
         'sales_report': sales_report
     }), 200
 
+'''I don't think this actually ever called but it is referenced in managerPage.js'''
+# @app.route('/api/purchases', methods=['GET'])
+# # this endpoint returns all of the purchase information to be viewed by the manager or superAdmin
+# def all_purchases():
+#     # returns all purchases from the purchases Table in the DB
+#     purchases = Purchases.query.all()  # queries all purchases
+#     purchases_list = []
+
+#     for purchase in purchases:
+#         purchase_data = {
+#             'purchaseID': purchase.purchaseID,
+#             'bidID': purchase.bidID,
+#             'VIN_carID': purchase.VIN_carID,
+#             'memberID': purchase.memberID,
+#             'confirmationNumber': purchase.confirmationNumber
+#         }
+#         purchases_list.append(purchase_data)
+
+#     return jsonify({'purchases': purchases_list}), 200
