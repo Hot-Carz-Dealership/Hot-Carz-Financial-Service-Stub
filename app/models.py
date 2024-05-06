@@ -78,7 +78,7 @@ class ServiceAppointment(db.Model):
     serviceID = db.Column(db.Integer, ForeignKey('Services.serviceID'))
     appointment_date = db.Column(db.DATE)
     comments = db.Column(db.TEXT)
-    status = db.Column(Enum('Scheduled', 'Done', 'Cancelled'))
+    status = db.Column(Enum('Scheduled', 'Done', 'Cancelled', 'Pending Confirmation'))
     last_modified = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(),
                               onupdate=db.func.current_timestamp())
 
@@ -200,7 +200,7 @@ class Addons(db.Model):
 
 class CheckoutCart(db.Model):
     # CheckoutCart table model
-    __tablename__ = 'Checkoutcart'
+    __tablename__ = 'CheckoutCart'
     
     cart_item_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     memberID = db.Column(db.Integer, db.ForeignKey('Member.memberID'), nullable=False)
@@ -213,23 +213,31 @@ class CheckoutCart(db.Model):
     last_updated = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp(),
                           onupdate=db.func.current_timestamp())
 
+class Warranty(db.Model):
+    # Warranty table model
+    __tablename__ = 'Warranty'
+    
+    Warranty_ID = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    VIN_carID = db.Column(db.String(17))# there should be fk here but idk why it didnt work
+    addon_ID = db.Column(db.Integer, db.ForeignKey('Addons.itemID'))
+    # memberID = db.Column(db.Integer, db.ForeignKey('Member.memberID'), nullable=False)
 
 
-
-# not important to use rn, will get these up and running at a later date
-# class MemberAuditLog(db.Model):
-#     __tablename__ = 'MemberAuditLog'
-#     logID = db.Column(db.Integer, primary_key=True, autoincrement=True)
-#     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
-#     event_description = db.Column(db.TEXT)
-#     event_timestamp = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
-#
-#
-# class EmployeeAuditLog(db.Model):
-#     __tablename__ = 'EmployeeAuditLog'
-#     logID = db.Column(db.Integer, primary_key=True, autoincrement=True)
-#     employeeID = db.Column(db.Integer, ForeignKey('Employee.employeeID'))
-#     event_description = db.Column(db.TEXT)
-#     event_timestamp = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
-
-
+class WarrantyService(db.Model):
+    # WarrantyService table model
+    __tablename__ = 'WarrantyService'
+    
+    addon_ID = db.Column(db.Integer, db.ForeignKey('Addons.itemID'),primary_key=True)
+    serviceID = db.Column(db.Integer, db.ForeignKey('Services.serviceID'))
+    
+class OrderHistory(db.Model):
+    # OrderHistory table model
+    __tablename__ = 'OrderHistory'
+    
+    order_item_ID =  db.Column(db.Integer, primary_key=True, autoincrement=True)
+    memberID = db.Column(db.Integer, db.ForeignKey('Member.memberID') )
+    item_name = db.Column(db.String(120))
+    item_price = db.Column(db.DECIMAL(10, 2))
+    financed_amount = db.Column(db.DECIMAL(10, 2))
+    confirmationNumber = db.Column(db.String(13))
+    purchaseDate = db.Column(db.TIMESTAMP)
