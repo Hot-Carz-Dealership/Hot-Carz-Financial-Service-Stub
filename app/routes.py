@@ -534,7 +534,7 @@ def monthly_sales_report():
         member_id = data.get('member_id')
 
 '''
-
+#WORKED WITH /FORWARD
 @app.route('/api/vehicle-purchase/apply-for-financing', methods=['POST'])
 # Route just to apply for financing and returns terms if user is eligible
 # This wont add to any tables yet,
@@ -599,7 +599,7 @@ def apply_for_financing():
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
-
+#WORKED WITH /FORWARD
 @app.route('/api/vehicle-purchase/insert-financing', methods=['POST'])
 # Use this route whenever the user accepts the loan to add it to the db
 def insert_financing():
@@ -656,13 +656,17 @@ def insert_financing():
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
-
+    
+#WORKED WITH /FORWARD
 @app.route('/api/vehicle-purchase/make-purchase', methods=['POST'])
 # Route Where all purchases will be made for car,addons, or service center
 def make_purchase():
     # here we deal with Purchases and Payments table    
     try:
-        member_id = session.get('member_session_id')
+        # member_id = session.get('member_session_id')
+        # Get the member ID from the request JSON data
+        data = request.json
+        member_id = data.get('member_id')
         if not member_id:
             return jsonify({'message': 'Unauthorized access. Please log in.'}), 403
 
@@ -804,10 +808,103 @@ def make_purchase():
         db.session.rollback()
         return jsonify({'error': f'Error: {str(e)}'}), 500
 
+#WORKED WITH /FORWARD
+@app.route('/api/member/order_history', methods=['GET'])
+# Route retrieves order history for a logged-in member, calculates subtotal, taxes, amount paid, and total amount financed for each order, and returns the formatted data as JSON.
+def order_history():
+    # Get the logged-in member ID
+    # member_id = session.get('member_session_id')
+    # Get the member ID from the request JSON data
+    data = request.json
+    member_id = data.get('member_id')
+    if not member_id:
+        return jsonify({'message': 'Unauthorized access. Please log in.'}), 403
+
+    # Query to get all orders for the logged-in member
+    orders = OrderHistory.query.filter_by(memberID=member_id).all()
+
+    if not orders:
+        return jsonify({'message': 'No orders found for the logged-in member.'}), 404
+
+    # Prepare dictionary to store order history data per confirmationNumber
+    order_history_data = {}
+
+    for order in orders:
+        confirmation_number = order.confirmationNumber
+        # If the confirmation number already exists in the dictionary, update the order details
+        if confirmation_number in order_history_data:
+            order_data = order_history_data[confirmation_number]
+            # Add item to the existing items list
+            order_data['items'].append({
+                'Item Name': order.item_name,
+                'Item Price': '{:.2f}'.format(float(order.item_price)),
+                'Financed Amount': '{:.2f}'.format(float(order.financed_amount))
+            })
+            # Update subtotal, taxes, amount paid, and total amount financed
+            order_data['Subtotal'] += float(order.item_price)
+            order_data['Taxes'] = round(order_data['Subtotal'] * 0.05, 2)
+            order_data['Amount Paid'] = round(order_data['Subtotal'] + order_data['Taxes'], 2)
+            order_data['Total Financed'] += float(order.financed_amount)
+        # If the confirmation number does not exist in the dictionary, create a new entry
+        else:
+            # Initialize order details
+            subtotal = float(order.item_price)  # Convert to float
+            taxes = round(subtotal * 0.05, 2)
+            amount_paid = round(subtotal + taxes, 2)
+            total_financed = float(order.financed_amount)
+            order_history_data[confirmation_number] = {
+                'Confirmation Number': confirmation_number,
+                'Subtotal': subtotal,
+                'Taxes': taxes,
+                'Amount Paid': amount_paid,
+                'Total Financed': total_financed,
+                'items': [
+                    {
+                        'Item Name': order.item_name,
+                        'Item Price': '{:.2f}'.format(float(order.item_price)),
+                        'Financed Amount': '{:.2f}'.format(float(order.financed_amount))
+                    }
+                ]
+            }
+
+    # Convert dictionary values to list for JSON serialization
+    order_history_list = list(order_history_data.values())
+
+    # Format Subtotal, Taxes, and Amount Paid for each order
+    for order_data in order_history_list:
+        order_data['Subtotal'] = '{:.2f}'.format(float(order_data['Subtotal']))
+        order_data['Taxes'] = '{:.2f}'.format(float(order_data['Taxes']))
+        order_data['Amount Paid'] = '{:.2f}'.format(float(order_data['Amount Paid']))
+        order_data['Total Financed'] = '{:.2f}'.format(float(order_data['Total Financed']))
+
+    return jsonify(order_history_list), 200
 
 
 
+'''Not gonna test this one for now
+This route show be taking in the employee_id
+also it should change the bidStatus
+'''
+@app.route('/api/manager/counter_bid_offer', methods=['POST'])
+#for manager to counter bid
+def counter_bid_offer():
+    if request.method == 'POST':
+        data = request.json
+        bid_id = data.get('bidID')
+        new_offer_price = data.get('newOfferPrice')
 
+        # Fetch the bid from the database
+        bid = Bids.query.get(bid_id)
+
+        if bid:
+            # Update the bid's offer price
+            bid.bidValue = new_offer_price
+            db.session.commit()
+            return jsonify({'message': 'Bid offer price updated successfully'})
+        else:
+            return jsonify({'error': 'Bid not found'}), 404
+    else:
+        return jsonify({'error': 'Method not allowed'}), 405
 
 
 
