@@ -613,6 +613,21 @@ def monthly_sales_report():
     month = request.args.get('month')  # 1-12 for selected month
     year = request.args.get('year')    # YYYY format for selected year
 
+    # Validate month and year inputs
+    if not month or not year:
+        return jsonify({'message': 'Month and year are required parameters'}), 400
+
+    try:
+        month = int(month)
+        year = int(year)
+    except ValueError:
+        return jsonify({'message': 'Invalid month or year format'}), 400
+
+    # Validate month range
+    if month < 1 or month > 12:
+        return jsonify({'message': 'Invalid month value. Month should be between 1 and 12'}), 400
+
+
     # Debugging statements for month and year
     print("Selected month:", month)
     print("Selected year:", year)
@@ -672,7 +687,6 @@ def monthly_sales_report():
                 print(f"Bid not found for Purchase ID: {purchase.purchaseID}")
 
         total_sales += bid_value
-        print(f"timestamp is  {purchase.purchaseDate}")
 
         sales_report.append({
             'purchase_id': purchase.purchaseID,
@@ -691,22 +705,29 @@ def monthly_sales_report():
     last_year_sales = Purchases.query.filter(Purchases.purchaseDate >= last_year_start, Purchases.purchaseDate <= last_year_end).all()
     last_year_month_sales = Purchases.query.filter(Purchases.purchaseDate >= last_year_month_start, Purchases.purchaseDate <= last_year_month_end).all()
 
+    yearly_purchases = Purchases.query.filter(db.extract('year', Purchases.purchaseDate) == year).all()
+
     # Calculate total sales for other types of reports
     total_all_time_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in all_time_sales)
     total_yearly_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in yearly_sales)
     total_last_year_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in last_year_sales)
     total_last_year_month_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in last_year_month_sales)
 
+    # Calculate total sales for the current year
+    total_this_year = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in yearly_purchases)
+
 
 
     return jsonify({
         'total_sales': str(total_sales),  # Convert total sales to string for JSON serialization
+        'total_this_year': str(total_this_year),  # Total sales for the selected year
         'all_time_sales': str(total_all_time_sales),
         'yearly_sales': str(total_yearly_sales),
         'last_year_sales': str(total_last_year_sales),
         'last_year_month_sales': str(total_last_year_month_sales),
         'sales_report': sales_report
     }), 200
+
 
 
 @app.route('/api/customer/make-payment', methods=['POST'])
