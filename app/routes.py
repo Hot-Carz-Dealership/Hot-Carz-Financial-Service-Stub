@@ -900,7 +900,7 @@ def counter_bid_offer():
             # Update the bid's offer price
             bid.bidValue = new_offer_price
             #Change Bid Status Here-- to members turn
-            bid.bidStatus='Processing'
+            bid.bidStatus='Member Processing'
             db.session.commit()
             return jsonify({'message': 'Bid offer price updated successfully'})
         else:
