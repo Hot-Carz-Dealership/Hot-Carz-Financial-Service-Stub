@@ -186,7 +186,7 @@ class Purchases(db.Model):
     confirmationNumber = db.Column(db.String(13), unique=True)
     purchaseType = db.Column(Enum('Vehicle/Add-on Purchase', 'Vehicle/Add-on Continuing Payment', 'Service Payment'))
     purchaseDate = db.Column(db.TIMESTAMP)
-    signature = db.Column(Enum('Yes', 'No'))
+    signature = db.Column(Enum('Yes', 'No', 'ONLYCUSTOMER'))
 
 
 
