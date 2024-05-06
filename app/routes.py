@@ -604,8 +604,28 @@ def apply_for_financing():
 
 
 
-''' Helper Functions'''
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                #################################
+                                #                               #
+                                #   ''' Helper Functions'''     #
+                                #                               #
+                                #################################
 
 
 def regex_bank_acct_check(routing_number: str, account_number: str) -> bool:
