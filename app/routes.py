@@ -657,7 +657,152 @@ def insert_financing():
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
+@app.route('/api/vehicle-purchase/make-purchase', methods=['POST'])
+# Route Where all purchases will be made for car,addons, or service center
+def make_purchase():
+    # here we deal with Purchases and Payments table    
+    try:
+        member_id = session.get('member_session_id')
+        if not member_id:
+            return jsonify({'message': 'Unauthorized access. Please log in.'}), 403
 
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        required_fields = ['routingNumber', 'bankAcctNumber', 'Amount Due Now', 'Financed Amount']
+        missing_fields = [field for field in required_fields if field not in data]
+        if missing_fields:
+            error_message = f'Missing required field(s): {", ".join(missing_fields)}'
+            return jsonify({'error': error_message}), 400
+
+        # Gen a single confirmation number for the purchase
+        confirmation_number = confirmation_number_generation()
+
+        # Retrieve cart items
+        cart_items = CheckoutCart.query.filter_by(memberID=member_id).all()
+
+        # Extract data from JSON request
+
+        # Needed for purchases table
+        VIN_carID = None
+        addon_ID = None
+        serviceID = None
+        bidID = None
+        # purchaseType = None
+
+        # Needed for payments table
+        financed_amount = Decimal(data.get('Financed Amount', 0))
+        valuePaid = Decimal(data.get('Amount Due Now', 0))
+        routingNumber = data.get('routingNumber')
+        bankAcctNumber = data.get('bankAcctNumber')
+        financingID = None
+        # Add validation on front end for routing and acct numbers
+
+        # Lists to accumulate VINs and addon IDs
+        vin_with_addons = None
+        addons = []
+
+        # Add cart items to the Purchases table
+        for item in cart_items:
+            bidID = None
+            addon_ID = item.addon_ID
+            # Check if VIN_carID exists in the bids table and get bidID if it does
+            VIN_carID = item.VIN_carID
+            if VIN_carID:
+                vin_with_addons = VIN_carID
+                bid = Bids.query.filter_by(VIN_carID=VIN_carID).first()
+                if bid:
+                    bidID = bid.bidID
+                if item.financed_amount:
+                    # looks up the financing id of the car being financed
+                    financing = Financing.query.filter_by(VIN_carID=VIN_carID).first()
+                    if financing:
+                        financingID = financing.financingID
+            # If the item is an addon, add addon to the lists
+            if addon_ID:
+                addons.append(addon_ID)
+
+            new_purchase = Purchases(
+                bidID=bidID,
+                memberID=member_id,
+                VIN_carID=VIN_carID,
+                addon_ID=item.addon_ID,
+                serviceID=item.serviceID,
+                confirmationNumber=confirmation_number,
+                purchaseType='Vehicle/Add-on Purchase' if not item.serviceID else 'Service Payment',
+                purchaseDate=datetime.now(),
+                signature='No'
+            )
+            # Check if provided IDs exist
+            if VIN_carID and not CarInfo.query.filter_by(VIN_carID=VIN_carID).first():
+                return jsonify({'error': 'Car with provided VIN not found'}), 404
+            elif addon_ID and not Addons.query.filter_by(itemID=addon_ID).first():
+                return jsonify({'error': 'Addon with provided ID not found'}), 404
+            elif serviceID and not Services.query.filter_by(serviceID=serviceID).first():
+                return jsonify({'error': 'Service with provided ID not found'}), 404
+
+            # Update CarInfo status to 'sold'
+            db.session.query(CarInfo).filter_by(VIN_carID=VIN_carID).update({'status': 'sold'})
+            # Update CarVINs purchase_status to 'Dealership - Purchased' and memberID to current memberID
+            db.session.query(CarVINs).filter_by(VIN_carID=VIN_carID).update(
+                {'purchase_status': 'Dealership - Purchased', 'memberID': member_id})
+
+            db.session.commit()
+
+            db.session.add(new_purchase)
+            db.session.commit()
+
+        # Create Warranty instances for each addon associated with the VIN
+        for addon in addons:
+            new_warranty = Warranty(
+                VIN_carID=vin_with_addons,
+                addon_ID=addon
+            )
+            db.session.add(new_warranty)
+
+        # Add cart items to the OrderHistory table
+        for item in cart_items:
+            new_order_history = OrderHistory(
+                memberID=member_id,
+                item_name=item.item_name,
+                item_price=item.item_price,
+                financed_amount=item.financed_amount,
+                confirmationNumber=confirmation_number,
+                purchaseDate=datetime.now()
+            )
+            db.session.add(new_order_history)
+            db.session.commit()
+
+        # Hash the bank info
+        routingNumber = bcrypt.hashpw(routingNumber.encode('utf-8'), bcrypt.gensalt())
+        bankAcctNumber = bcrypt.hashpw(bankAcctNumber.encode('utf-8'), bcrypt.gensalt())
+
+        new_payment = Payments(
+            paymentStatus='Completed',
+            valuePaid=valuePaid.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
+            valueToPay=financed_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
+            initialPurchase=datetime.now(),
+            lastPayment=datetime.now(),
+            routingNumber=routingNumber,
+            bankAcctNumber=bankAcctNumber,
+            memberID=member_id,
+            financingID=financingID
+        )
+        db.session.add(new_payment)
+        db.session.commit()
+
+        # payment stub generation can occur through the means of functions above with endpoints
+        # /api/member
+        # /api/payments
+
+        # need to clear the cart after wards using delete cart route on front end
+
+        return jsonify({'message': 'Purchase made successfully.',
+                        'confirmation_number':confirmation_number}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error: {str(e)}'}), 500
 
 
 
