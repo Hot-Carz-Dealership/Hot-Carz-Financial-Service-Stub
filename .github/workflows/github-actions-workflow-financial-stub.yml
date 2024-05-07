@@ -21,5 +21,5 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-#      - name: Run Unit Tests
-#        run: FLASK_ENV=testing pytest
+      - name: Run Unit Tests
+        run: FLASK_ENV=testing pytest
