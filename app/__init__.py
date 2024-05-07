@@ -17,8 +17,8 @@ db_name = 'dealership_backend'
 
 # --------------- check for if testing is needed for this stub -------------
  #SWAP COMMENTS FOR LOCAL DEV
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://root@localhost/' + db_name 
-#app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite://root:aGGeAzhlGdyhqpkesCDkjgcyKXHYXEuK@viaduct.proxy.rlwy.net:20836/dealership_backend"
+#app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://root@localhost/' + db_name 
+app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite://root:aGGeAzhlGdyhqpkesCDkjgcyKXHYXEuK@viaduct.proxy.rlwy.net:20836/dealership_backend"
 
 # Load the configuration
 app.config.from_object(Config)
