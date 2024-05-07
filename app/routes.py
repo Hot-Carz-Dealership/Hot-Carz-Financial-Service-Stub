@@ -293,7 +293,7 @@ def current_bids():
         bids = Bids.query.all()
         bid_data = []
         for bid in bids:
-            purchase = Purchases.query.filter_by(bidID=bid.bidID).first()
+            purchase = Bids.query.filter_by(bidID=bid.bidID).first()
             if purchase:
                 car = CarInfo.query.filter_by(VIN_carID=purchase.VIN_carID).first()
                 if car:
