@@ -68,7 +68,6 @@ class Services(db.Model):
     price = db.Column(db.DECIMAL(10, 2))
 
 
-
 class ServiceAppointment(db.Model):
     # ServiceAppointment table model
     __tablename__ = 'ServiceAppointment'
@@ -167,9 +166,9 @@ class Bids(db.Model):
     __tablename__ = 'Bids'
     bidID = db.Column(db.Integer, primary_key=True, autoincrement=True)
     memberID = db.Column(db.Integer, ForeignKey('Member.memberID'))
-    VIN_carID = db.Column(db.String(17), db.ForeignKey('CarInfo.VIN_carID')) #Bids Should be attached to some vehicle
+    VIN_carID = db.Column(db.String(17), db.ForeignKey('CarInfo.VIN_carID'))  # Bids Should be attached to some vehicle
     bidValue = db.Column(db.DECIMAL(10, 2))
-    bidStatus = db.Column(Enum('Confirmed', 'Denied', 'Processing', 'None'))
+    bidStatus = db.Column(Enum('Confirmed', 'Denied', 'Processing', 'None', 'Member Processing'))
     bidTimestamp = db.Column(db.TIMESTAMP)
     last_updated_by = db.Column(db.Integer, ForeignKey('Employee.employeeID'))
 
@@ -189,7 +188,6 @@ class Purchases(db.Model):
     signature = db.Column(Enum('Yes', 'No', 'ONLYCUSTOMER'))
 
 
-
 class Addons(db.Model):
     # Addons table model
     __tablename__ = 'Addons'
@@ -201,7 +199,7 @@ class Addons(db.Model):
 class CheckoutCart(db.Model):
     # CheckoutCart table model
     __tablename__ = 'CheckoutCart'
-    
+
     cart_item_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     memberID = db.Column(db.Integer, db.ForeignKey('Member.memberID'), nullable=False)
     VIN_carID = db.Column(db.String(45), db.ForeignKey('CarInfo.VIN_carID'))
@@ -211,14 +209,15 @@ class CheckoutCart(db.Model):
     item_price = db.Column(db.DECIMAL(10, 2), nullable=False)
     financed_amount = db.Column(db.DECIMAL(10, 2), nullable=False)
     last_updated = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp(),
-                          onupdate=db.func.current_timestamp())
+                             onupdate=db.func.current_timestamp())
+
 
 class Warranty(db.Model):
     # Warranty table model
     __tablename__ = 'Warranty'
-    
+
     Warranty_ID = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    VIN_carID = db.Column(db.String(17))# there should be fk here but idk why it didnt work
+    VIN_carID = db.Column(db.String(17))  # there should be fk here but idk why it didnt work
     addon_ID = db.Column(db.Integer, db.ForeignKey('Addons.itemID'))
     # memberID = db.Column(db.Integer, db.ForeignKey('Member.memberID'), nullable=False)
 
@@ -226,16 +225,17 @@ class Warranty(db.Model):
 class WarrantyService(db.Model):
     # WarrantyService table model
     __tablename__ = 'WarrantyService'
-    
-    addon_ID = db.Column(db.Integer, db.ForeignKey('Addons.itemID'),primary_key=True)
+
+    addon_ID = db.Column(db.Integer, db.ForeignKey('Addons.itemID'), primary_key=True)
     serviceID = db.Column(db.Integer, db.ForeignKey('Services.serviceID'))
-    
+
+
 class OrderHistory(db.Model):
     # OrderHistory table model
     __tablename__ = 'OrderHistory'
-    
-    order_item_ID =  db.Column(db.Integer, primary_key=True, autoincrement=True)
-    memberID = db.Column(db.Integer, db.ForeignKey('Member.memberID') )
+
+    order_item_ID = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    memberID = db.Column(db.Integer, db.ForeignKey('Member.memberID'))
     item_name = db.Column(db.String(120))
     item_price = db.Column(db.DECIMAL(10, 2))
     financed_amount = db.Column(db.DECIMAL(10, 2))

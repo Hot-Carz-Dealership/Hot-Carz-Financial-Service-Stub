@@ -14,7 +14,6 @@ from flask import jsonify, request, session
 from sqlalchemy.exc import IntegrityError
 from decimal import Decimal, ROUND_HALF_UP
 
-
 import calendar
 
 ''' all the Financial Services APIs/ENDPOINTS are configured and exposed in this .py file '''
@@ -22,7 +21,7 @@ import calendar
 '''ALL PURCHASES ARE NOW ONLY MADE WITH BANK ROUTING AND ACCT NUMBER'''
 
 
-@app.route('/')
+@app.route('/')  # TEST DONE
 # test to make sure it runs and is connected to your DB. if it prints "it works" on your screen, you are connected to the DB correctly.
 def testdb():
     try:
@@ -33,6 +32,7 @@ def testdb():
         error_text = "<p>The error:<br>" + str(e) + "</p>"
         hed = '<h1>Something is broken.</h1>'
         return hed + error_text
+
 
 ### I couldn't figure out how to transfer the session id over so for now this works for testing at least
 ### I'll just have the login frontend also make a request to this until i figure out some better solution
@@ -75,7 +75,6 @@ def get_current_user():
         'join_date': member.join_date
         # in the future will add Address, Zipcode and State on where the member is from
     }), 200
-
 
 
 @app.route('/api/logout', methods=['POST'])
@@ -185,7 +184,6 @@ def login():
         return jsonify({'error': str(e)}), 500
 
 
-
 '''
 I dont want to fuck with this one for now cause its being worked on. 
 There is a copy of this in backend right now
@@ -201,7 +199,9 @@ There is a copy of this in backend right now
 
 
 '''
-@app.route('/api/member/current-bids', methods=['GET', 'POST'])
+
+
+@app.route('/api/member/current-bids', methods=['GET', 'POST'])  # TEST DONE
 def current_member_bids():
     # check if the member is logged in, if not redirect them to log in
     member_id = session.get('member_session_id')
@@ -230,7 +230,7 @@ def current_member_bids():
     elif request.method == 'POST':
         # frontend needs to pass these values in for it to work
         data = request.json
-        bid_id = data.get('bid_id') # these should work as a button accociated with the bid value/row
+        bid_id = data.get('bid_id')  # these should work as a button accociated with the bid value/row
         new_bid_value = data.get('new_bid_value')
 
         if bid_id is None or new_bid_value is None:
@@ -248,26 +248,26 @@ def current_member_bids():
             return jsonify({'message': 'Denied bid not found for this member with the provided bid ID'}), 404
 
 
-#WORKED WITH /FORWARD
-@app.route('/api/vehicle-purchase/new-bid-insert', methods=['POST'])
+# WORKED WITH /FORWARD
+@app.route('/api/vehicle-purchase/new-bid-insert', methods=['POST'])  # TEST CASE DONE
 # Adds a new bid to bid table
 def bid_insert_no_financing():
     try:
         # Extract data from the request
         data = request.get_json()
         required_fields = ['member_id', 'vin', 'bid_value']
-        
+
         # Check if all required fields are present
         missing_fields = [field for field in required_fields if field not in data]
         if missing_fields:
             return jsonify({'message': f'Error: Missing fields - {", ".join(missing_fields)}'}), 400
-        
+
         # Extract data
         member_id = data['member_id']
         vin = data['vin']
         bid_value = data['bid_value']
         bid_status = 'Processing'
-        
+
         # Create a new bid entry
         new_bid = Bids(
             memberID=member_id,
@@ -285,7 +285,8 @@ def bid_insert_no_financing():
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
-#WORKED WITH /FORWARD
+
+# WORKED WITH /FORWARD
 @app.route('/api/manager/current-bids', methods=['GET', 'POST'])
 def current_bids():
     if request.method == 'GET':
@@ -298,14 +299,14 @@ def current_bids():
                 car = CarInfo.query.filter_by(VIN_carID=purchase.VIN_carID).first()
                 if car:
                     bid_info = {
-                        'bidID' : bid.bidID,
+                        'bidID': bid.bidID,
                         'make': car.make,
                         'model': car.model,
                         'VIN': car.VIN_carID,
                         'MSRP': car.price,
                         'bidValue': bid.bidValue,
                         'bidStatus': bid.bidStatus,
-                        'memberID' : bid.memberID
+                        'memberID': bid.memberID
                     }
                     bid_data.append(bid_info)
         return jsonify(bid_data)
@@ -318,13 +319,14 @@ def current_bids():
         if bid:
             bid.bidStatus = confirmation_status
             db.session.commit()
-            return jsonify({'message': 'Bid status updated successfully'}),200
+            return jsonify({'message': 'Bid status updated successfully'}), 200
         else:
             return jsonify({'error': 'Bid not found'}), 404
 
-#WORKED WITH /FORWARD
-@app.route('/api/manager/get-financing', methods=['POST'])
-#FOR MANAGER TO GET THE FINANCING INFO OF A SPECIFIC MEMBER
+
+# WORKED WITH /FORWARD
+@app.route('/api/manager/get-financing', methods=['POST'])  # TEST DONE
+# FOR MANAGER TO GET THE FINANCING INFO OF A SPECIFIC MEMBER
 def get_financing_for_member():
     try:
         # Get the member ID from the request JSON data
@@ -368,7 +370,10 @@ def get_financing_for_member():
     except Exception as e:
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
+
 '''Currently workes with /forward but potentially might need chnaging'''
+
+
 @app.route('/api/manager/monthly-sales-report', methods=['GET'])
 # this API generates monthly sales reports on all payments made in the dealership
 # Scufffedd but i think it works
@@ -387,7 +392,7 @@ def monthly_sales_report():
     # have these values return in some like tab like or drop down value from the manager dashboard view
     # Get month and year from request parameters
     month = request.args.get('month')  # 1-12 for selected month
-    year = request.args.get('year')    # YYYY format for selected year
+    year = request.args.get('year')  # YYYY format for selected year
 
     # Validate month and year inputs
     if not month or not year:
@@ -402,7 +407,6 @@ def monthly_sales_report():
     # Validate month range
     if month < 1 or month > 12:
         return jsonify({'message': 'Invalid month value. Month should be between 1 and 12'}), 400
-
 
     # Debugging statements for month and year
     print("Selected month:", month)
@@ -426,12 +430,12 @@ def monthly_sales_report():
     last_year_start = datetime(int(year) - 1, 1, 1)
     last_year_end = datetime(int(year) - 1, 12, 31)
     last_year_month_start = datetime(int(year) - 1, int(month), 1)
-    
+
     # Check if it's February and the last day of the month is 29 (indicating a leap year)
     if int(month) == 2 and last_day_of_month == 29:
         # Adjust the last day of February to 28 for non-leap years
         last_day_of_month = 28
-        
+
     last_year_month_end = datetime(int(year) - 1, int(month), last_day_of_month)
 
     # Debugging statements for dates
@@ -477,22 +481,33 @@ def monthly_sales_report():
 
     # Query purchases for other types of reports
     all_time_sales = Purchases.query.all()
-    yearly_sales = Purchases.query.filter(Purchases.purchaseDate >= start_date, Purchases.purchaseDate <= end_date).all()
-    last_year_sales = Purchases.query.filter(Purchases.purchaseDate >= last_year_start, Purchases.purchaseDate <= last_year_end).all()
-    last_year_month_sales = Purchases.query.filter(Purchases.purchaseDate >= last_year_month_start, Purchases.purchaseDate <= last_year_month_end).all()
+    yearly_sales = Purchases.query.filter(Purchases.purchaseDate >= start_date,
+                                          Purchases.purchaseDate <= end_date).all()
+    last_year_sales = Purchases.query.filter(Purchases.purchaseDate >= last_year_start,
+                                             Purchases.purchaseDate <= last_year_end).all()
+    last_year_month_sales = Purchases.query.filter(Purchases.purchaseDate >= last_year_month_start,
+                                                   Purchases.purchaseDate <= last_year_month_end).all()
 
     yearly_purchases = Purchases.query.filter(db.extract('year', Purchases.purchaseDate) == year).all()
 
     # Calculate total sales for other types of reports
-    total_all_time_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in all_time_sales)
-    total_yearly_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in yearly_sales)
-    total_last_year_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in last_year_sales)
-    total_last_year_month_sales = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in last_year_month_sales)
+    total_all_time_sales = sum(Bids.query.get(purchase.bidID).bidValue if (
+                purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in
+                               all_time_sales)
+    total_yearly_sales = sum(Bids.query.get(purchase.bidID).bidValue if (
+                purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in
+                             yearly_sales)
+    total_last_year_sales = sum(Bids.query.get(purchase.bidID).bidValue if (
+                purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in
+                                last_year_sales)
+    total_last_year_month_sales = sum(Bids.query.get(purchase.bidID).bidValue if (
+                purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in
+                                      last_year_month_sales)
 
     # Calculate total sales for the current year
-    total_this_year = sum(Bids.query.get(purchase.bidID).bidValue if (purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in yearly_purchases)
-
-
+    total_this_year = sum(Bids.query.get(purchase.bidID).bidValue if (
+                purchase.bidID is not None and Bids.query.get(purchase.bidID) is not None) else 0 for purchase in
+                          yearly_purchases)
 
     return jsonify({
         'total_sales': str(total_sales),  # Convert total sales to string for JSON serialization
@@ -503,6 +518,7 @@ def monthly_sales_report():
         'last_year_month_sales': str(total_last_year_month_sales),
         'sales_report': sales_report
     }), 200
+
 
 '''I don't think this actually ever called but it is referenced in managerPage.js'''
 # @app.route('/api/purchases', methods=['GET'])
@@ -527,15 +543,16 @@ def monthly_sales_report():
 
 '''ONE SMALL STEP 🧑‍🚀'''
 
-
 '''
         # Get the member ID from the request JSON data
         data = request.json
         member_id = data.get('member_id')
 
 '''
-#WORKED WITH /FORWARD
-@app.route('/api/vehicle-purchase/apply-for-financing', methods=['POST'])
+
+
+# WORKED WITH /FORWARD
+@app.route('/api/vehicle-purchase/apply-for-financing', methods=['POST'])  # TEST DONE
 # Route just to apply for financing and returns terms if user is eligible
 # This wont add to any tables yet,
 # we'll have the front end send back the same terms if users accepts in another route
@@ -569,7 +586,7 @@ def apply_for_financing():
         loan_eligibility = check_loan_eligibility(total_cost, monthly_income)
         if not loan_eligibility:
             return jsonify({
-                               'message': 'Your yearly income is not sufficient to take on this loan. Reapply with more down payment'}), 400
+                'message': 'Your yearly income is not sufficient to take on this loan. Reapply with more down payment'}), 400
 
         # downPayment_value = total_cost - financing_loan_amount
         valueToPay_value = round(total_cost + finance_interest, 2)
@@ -599,7 +616,8 @@ def apply_for_financing():
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
 
-#WORKED WITH /FORWARD
+
+# WORKED WITH /FORWARD
 @app.route('/api/vehicle-purchase/insert-financing', methods=['POST'])
 # Use this route whenever the user accepts the loan to add it to the db
 def insert_financing():
@@ -656,8 +674,9 @@ def insert_financing():
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
-    
-#WORKED WITH /FORWARD
+
+
+# WORKED WITH /FORWARD
 @app.route('/api/vehicle-purchase/make-purchase', methods=['POST'])
 # Route Where all purchases will be made for car,addons, or service center
 def make_purchase():
@@ -803,13 +822,14 @@ def make_purchase():
         # need to clear the cart after wards using delete cart route on front end
 
         return jsonify({'message': 'Purchase made successfully.',
-                        'confirmation_number':confirmation_number}), 200
+                        'confirmation_number': confirmation_number}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Error: {str(e)}'}), 500
 
-#WORKED WITH /FORWARD
-@app.route('/api/member/order_history', methods=['GET'])
+
+# WORKED WITH /FORWARD
+@app.route('/api/member/order_history', methods=['GET'])  # TEST DONE
 # Route retrieves order history for a logged-in member, calculates subtotal, taxes, amount paid, and total amount financed for each order, and returns the formatted data as JSON.
 def order_history():
     # Get the logged-in member ID
@@ -880,13 +900,14 @@ def order_history():
     return jsonify(order_history_list), 200
 
 
-
 '''Not gonna test this one for now
 This route show be taking in the employee_id
 also it should change the bidStatus
 '''
+
+
 @app.route('/api/manager/counter_bid_offer', methods=['POST'])
-#for manager to counter bid
+# for manager to counter bid
 def counter_bid_offer():
     if request.method == 'POST':
         data = request.json
@@ -906,24 +927,13 @@ def counter_bid_offer():
     else:
         return jsonify({'error': 'Method not allowed'}), 405
 
+        #################################
+        #                               #
+        #   ''' Helper Functions'''     #
+        #                               #
+        #################################
 
 
-
-
-
-
-
-
-
-
-
-
-                                #################################
-                                #                               #
-                                #   ''' Helper Functions'''     #
-                                #                               #
-                                #################################
-                                
 def regex_bank_acct_check(routing_number: str, account_number: str) -> bool:
     # regex validation for the routing number and account number to be correct
     routing_regex = re.compile(r'^[0-9]{9}$')
@@ -944,7 +954,6 @@ def regex_ssn(ssn: str) -> bool:
     return True
 
 
-
 def return_vehicle_cost(vehicle_vin):
     # Validate vehicle VIN
     # if not is_valid_vin(vehicle_vin):
@@ -952,14 +961,11 @@ def return_vehicle_cost(vehicle_vin):
 
     # Retrieve vehicle price from the database
     vehicle = CarInfo.query.filter_by(VIN_carID=vehicle_vin).first()
-    
+
     if not vehicle:
         raise ValueError("Vehicle with VIN {} not found.".format(vehicle_vin))
 
     return vehicle.price
-
-
-
 
 
 def creditScoreGenerator(member_id: int, monthly_income: float) -> int:
@@ -972,8 +978,6 @@ def creditScoreGenerator(member_id: int, monthly_income: float) -> int:
     random.seed(seed_int)
     # Generate a random credit score
     return random.randint(500, 850)
-
-
 
 
 def interest_rate(creditScore: int) -> int:
@@ -1015,6 +1019,7 @@ def adjust_loan_with_downpayment(vehicle_cost, down_payment):
     loan_amount = vehicle_cost - down_payment
     return loan_amount
 
+
 def calculateInterest(vehicleCost: int, monthlyIncome: int, creditscore: int) -> float:
     # generates the total amount financed after interest 
 
@@ -1033,6 +1038,3 @@ def confirmation_number_generation() -> str:
         # Log the exception or handle it appropriately
         print(f"Error generating confirmation number: {e}")
         return None
-
-
-
