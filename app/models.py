@@ -6,6 +6,7 @@ from sqlalchemy import Enum, ForeignKey
 
 # Defined SQLAlchemy models to represent database tables
 
+
 class Member(db.Model):
     # Member table model
     __tablename__ = 'Member'
